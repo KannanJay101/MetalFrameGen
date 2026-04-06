@@ -1,0 +1,71 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+DerivedData/
+*.xccheckout
+*.xcscmblueprint
+*.gcno
+*.gcda
+*.profdata
+Timeline.xctimeline
+Playground.workspace
+
+# Swift Package Manager
+.swiftpm/configuration/
+.build/
+Package.resolved
+
+# CMake / generic build
+build/
+cmake-build-*/
+out/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+
+# IDE / editors
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Logs & temp
+*.log
+*.tmp
+*.temp
+~$*
+
+# Archives & binaries (if produced in-tree)
+*.o
+*.a
+*.dylib
+*.exe
+*.dll
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+
+# Optional: profiling / docs scratch
+*.trace
+*.instruments/

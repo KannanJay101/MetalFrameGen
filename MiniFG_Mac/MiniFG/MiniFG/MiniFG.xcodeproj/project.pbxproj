@@ -1,0 +1,556 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		5E513E6B2F7D908B008FFEF0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E513E532F7D9088008FFEF0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E513E5A2F7D9088008FFEF0;
+			remoteInfo = MiniFG;
+		};
+		5E513E752F7D908B008FFEF0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E513E532F7D9088008FFEF0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E513E5A2F7D9088008FFEF0;
+			remoteInfo = MiniFG;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		5E513E5B2F7D9088008FFEF0 /* MiniFG.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MiniFG.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E513E6A2F7D908B008FFEF0 /* MiniFGTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MiniFGTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E513E742F7D908B008FFEF0 /* MiniFGUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MiniFGUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		5E513E5D2F7D9088008FFEF0 /* MiniFG */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MiniFG;
+			sourceTree = "<group>";
+		};
+		5E513E6D2F7D908B008FFEF0 /* MiniFGTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MiniFGTests;
+			sourceTree = "<group>";
+		};
+		5E513E772F7D908B008FFEF0 /* MiniFGUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MiniFGUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5E513E582F7D9088008FFEF0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E513E672F7D908B008FFEF0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E513E712F7D908B008FFEF0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5E513E522F7D9088008FFEF0 = {
+			isa = PBXGroup;
+			children = (
+				5E513E5D2F7D9088008FFEF0 /* MiniFG */,
+				5E513E6D2F7D908B008FFEF0 /* MiniFGTests */,
+				5E513E772F7D908B008FFEF0 /* MiniFGUITests */,
+				5E513E5C2F7D9088008FFEF0 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5E513E5C2F7D9088008FFEF0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5E513E5B2F7D9088008FFEF0 /* MiniFG.app */,
+				5E513E6A2F7D908B008FFEF0 /* MiniFGTests.xctest */,
+				5E513E742F7D908B008FFEF0 /* MiniFGUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5E513E5A2F7D9088008FFEF0 /* MiniFG */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E513E7E2F7D908B008FFEF0 /* Build configuration list for PBXNativeTarget "MiniFG" */;
+			buildPhases = (
+				5E513E572F7D9088008FFEF0 /* Sources */,
+				5E513E582F7D9088008FFEF0 /* Frameworks */,
+				5E513E592F7D9088008FFEF0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5E513E5D2F7D9088008FFEF0 /* MiniFG */,
+			);
+			name = MiniFG;
+			packageProductDependencies = (
+			);
+			productName = MiniFG;
+			productReference = 5E513E5B2F7D9088008FFEF0 /* MiniFG.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5E513E692F7D908B008FFEF0 /* MiniFGTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E513E812F7D908B008FFEF0 /* Build configuration list for PBXNativeTarget "MiniFGTests" */;
+			buildPhases = (
+				5E513E662F7D908B008FFEF0 /* Sources */,
+				5E513E672F7D908B008FFEF0 /* Frameworks */,
+				5E513E682F7D908B008FFEF0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E513E6C2F7D908B008FFEF0 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5E513E6D2F7D908B008FFEF0 /* MiniFGTests */,
+			);
+			name = MiniFGTests;
+			packageProductDependencies = (
+			);
+			productName = MiniFGTests;
+			productReference = 5E513E6A2F7D908B008FFEF0 /* MiniFGTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		5E513E732F7D908B008FFEF0 /* MiniFGUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E513E842F7D908B008FFEF0 /* Build configuration list for PBXNativeTarget "MiniFGUITests" */;
+			buildPhases = (
+				5E513E702F7D908B008FFEF0 /* Sources */,
+				5E513E712F7D908B008FFEF0 /* Frameworks */,
+				5E513E722F7D908B008FFEF0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E513E762F7D908B008FFEF0 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5E513E772F7D908B008FFEF0 /* MiniFGUITests */,
+			);
+			name = MiniFGUITests;
+			packageProductDependencies = (
+			);
+			productName = MiniFGUITests;
+			productReference = 5E513E742F7D908B008FFEF0 /* MiniFGUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5E513E532F7D9088008FFEF0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1630;
+				LastUpgradeCheck = 1630;
+				TargetAttributes = {
+					5E513E5A2F7D9088008FFEF0 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					5E513E692F7D908B008FFEF0 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 5E513E5A2F7D9088008FFEF0;
+					};
+					5E513E732F7D908B008FFEF0 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 5E513E5A2F7D9088008FFEF0;
+					};
+				};
+			};
+			buildConfigurationList = 5E513E562F7D9088008FFEF0 /* Build configuration list for PBXProject "MiniFG" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5E513E522F7D9088008FFEF0;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5E513E5C2F7D9088008FFEF0 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5E513E5A2F7D9088008FFEF0 /* MiniFG */,
+				5E513E692F7D908B008FFEF0 /* MiniFGTests */,
+				5E513E732F7D908B008FFEF0 /* MiniFGUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5E513E592F7D9088008FFEF0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E513E682F7D908B008FFEF0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E513E722F7D908B008FFEF0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5E513E572F7D9088008FFEF0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E513E662F7D908B008FFEF0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E513E702F7D908B008FFEF0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5E513E6C2F7D908B008FFEF0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E513E5A2F7D9088008FFEF0 /* MiniFG */;
+			targetProxy = 5E513E6B2F7D908B008FFEF0 /* PBXContainerItemProxy */;
+		};
+		5E513E762F7D908B008FFEF0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E513E5A2F7D9088008FFEF0 /* MiniFG */;
+			targetProxy = 5E513E752F7D908B008FFEF0 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5E513E7C2F7D908B008FFEF0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		5E513E7D2F7D908B008FFEF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		5E513E7F2F7D908B008FFEF0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MiniFG/MiniFG.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFG;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "MiniFG/Render/MiniFG-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/MiniFG/Render",
+					"$(SRCROOT)/MiniFG/Compute",
+					"$(SRCROOT)/ThirdParty/metal-cpp/metal-cpp",
+				);
+			};
+			name = Debug;
+		};
+		5E513E802F7D908B008FFEF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MiniFG/MiniFG.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFG;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "MiniFG/Render/MiniFG-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/MiniFG/Render",
+					"$(SRCROOT)/MiniFG/Compute",
+					"$(SRCROOT)/ThirdParty/metal-cpp/metal-cpp",
+				);
+			};
+			name = Release;
+		};
+		5E513E822F7D908B008FFEF0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFGTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MiniFG.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MiniFG";
+			};
+			name = Debug;
+		};
+		5E513E832F7D908B008FFEF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFGTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MiniFG.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MiniFG";
+			};
+			name = Release;
+		};
+		5E513E852F7D908B008FFEF0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFGUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MiniFG;
+			};
+			name = Debug;
+		};
+		5E513E862F7D908B008FFEF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFGUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MiniFG;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5E513E562F7D9088008FFEF0 /* Build configuration list for PBXProject "MiniFG" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E513E7C2F7D908B008FFEF0 /* Debug */,
+				5E513E7D2F7D908B008FFEF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E513E7E2F7D908B008FFEF0 /* Build configuration list for PBXNativeTarget "MiniFG" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E513E7F2F7D908B008FFEF0 /* Debug */,
+				5E513E802F7D908B008FFEF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E513E812F7D908B008FFEF0 /* Build configuration list for PBXNativeTarget "MiniFGTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E513E822F7D908B008FFEF0 /* Debug */,
+				5E513E832F7D908B008FFEF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E513E842F7D908B008FFEF0 /* Build configuration list for PBXNativeTarget "MiniFGUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E513E852F7D908B008FFEF0 /* Debug */,
+				5E513E862F7D908B008FFEF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5E513E532F7D9088008FFEF0 /* Project object */;
+}
