@@ -1,36 +1,52 @@
-# Master Project Context: Mini-FG (macOS Apple Silicon Swift/C++ Hybrid)
+# MetalFrameGen / MiniFG — AI context
 
-## 1. Project Overview & Role
-You are an expert Apple Systems and Graphics Engineer specializing in Metal, `metal-cpp`, ScreenCaptureKit, and High-Performance Computing (HPC). 
+## Role
 
-The objective is to build a standalone macOS application that provides universal Frame Generation (interpolation) for existing games. This is a 14-day rapid prototype focusing on zero-latency pipelines and hardware-software co-design. 
+Treat this repo as a **macOS Metal + ScreenCaptureKit** prototype for **frame generation** (interpolation): capture a target window, process on GPU, present on a transparent overlay.
 
-The application acts as a screen overlay: capturing the target game window with zero latency using `ScreenCaptureKit` (Swift), handing the memory buffer to a native C++ rendering engine, interpolating an intermediate frame utilizing the Apple Neural Engine via `MetalFX` (C++), and presenting the frames at double the original framerate.
+## Truth in code (keep this current)
 
-## 2. Technical Stack
-* **Languages:** Swift 6 (UI / OS Capture) and C++20 (Core Engine / Rendering).
-* **Target:** macOS 14+ (Apple Silicon exclusively).
-* **Capture Pipeline:** `ScreenCaptureKit` (`SCStream`) in Swift.
-* **Compute/Interpolation:** Apple's `metal-cpp` library to interface with Metal and MetalFX natively from C++.
-* **Presentation:** `CAMetalLayer` / `CVDisplayLink` in a transparent, borderless `NSWindow` overlay.
+When answering “does frame generation work?”, **verify the render path in source**, not marketing text.
 
-## 3. Directory Structure
-Adhere strictly to this repository structure when generating code. Place all generated files in their respective directories.
+- **Capture:** Swift `StreamManager` / `SCStream` → `EngineBridge.submitFrame` → `MetalEngine::submitFrame` (upload to `m_inputTex`).
+- **Present:** `OverlayWindow` + `CVDisplayLink` drives `engine.renderFrame()` → `MetalEngine::renderFrame`.
+- **Interpolation today:** `MetalEngine::renderFrame` currently draws **`m_inputTex[m_readIdx]`** through the inline **fullscreen triangle shader** (passthrough). It does **not** call `Interpolator::interpolate` in that path. `Interpolator` is a **blit stub** (no `MTLFXFrameInterpolator` wired on public SDK). Until the engine invokes interpolation and produces a **synthesized intermediate** from **prev + curr** (or MetalFX where available), treat **true frame generation as not implemented**—only **capture + display** is.
+
+If you change the render path, update this section in the same commit.
+
+## Layout (actual)
 
 ```text
-MiniFG_Mac/
-├── claude.md                   # AI Assistant context and rules
-├── MiniFG.xcodeproj/           # Xcode project configuration
-└── MiniFG/                     # Main source code directory
-    ├── App/                    
-    │   ├── MiniFGApp.swift     # SwiftUI application entry point
-    │   └── OverlayWindow.swift # Transparent borderless window setup
-    ├── Capture/                
-    │   ├── WindowTracker.swift # Finds target application windows
-    │   └── StreamManager.swift # Handles SCStream and buffer output
-    ├── Render/ (C++ & Bridging)
-    │   ├── MetalEngine.hpp     # C++ Metal Engine header
-    │   ├── MetalEngine.cpp     # C++ metal-cpp implementation
-    │   └── EngineBridge.swift  # Swift-to-C++ interoperability layer
-    └── Compute/ (C++)          
-        └── Interpolator.cpp    # MetalFX MTLFXFrameInterpolator logic
+MetalFrameGen/
+├── MiniFG_Mac/MiniFG/MiniFG/
+│   ├── MiniFG.xcodeproj/
+│   └── MiniFG/
+│       ├── App/           # MiniFGApp.swift — SwiftUI UI + AppState
+│       ├── Capture/       # WindowTracker, StreamManager
+│       ├── Render/        # MetalEngine (C++), EngineBridge, MetalEngineObjC
+│       └── Compute/       # Interpolator.hpp / Interpolator.mm
+└── ThirdParty/metal-cpp/  # Header search path in Xcode
+```
+
+## Stack
+
+SwiftUI + ScreenCaptureKit (Swift), metal-cpp / Metal (C++), `CAMetalLayer`, `CVDisplayLink`.
+
+## Rules for codegen
+
+- Match existing naming and folder layout; avoid drive-by refactors.
+- ObjC selectors → Swift names: `configureWithLayer:` → `configure(with:)`, `resizeWidth:height:` → `resizeWidth(_:height:)`.
+- `NS_PRIVATE_IMPLEMENTATION` / `CA_` / `MTL_` **only** in one `.cpp` (currently `MetalEngine.cpp`).
+
+---
+
+## Verification mandate (agents must follow)
+
+When the user asks whether things **work**, are **ready**, or the **UI is operational**, do **not** answer from memory. Produce evidence:
+
+1. **Build:** Run `xcodebuild` for scheme `MiniFG` (macOS). Record **BUILD SUCCEEDED** or paste the **first real error**.
+2. **Frame-generation audit:** Read `MetalEngine.cpp` (and `Interpolator.mm`). State explicitly whether interpolation / MetalFX is **invoked** on the present path or **passthrough only**; name the functions involved.
+3. **UI audit:** Trace `MiniFGApp.swift` — `AppState` (`refreshWindows`, `startCapture`, `stop`, stats timer), `SetupView`, `RunningView`. Confirm controls exist, disabled states, error surfacing, and `@MainActor` safety for UI updates.
+4. **Runtime / manual:** Full overlay + capture needs **Screen Recording** permission and a real target window. If you cannot run the GUI, label UI verification **“manual required”** and list exact steps (launch app, grant permission, pick window, confirm overlay + counters).
+
+Prefer the project skill **minifg-verify** (`.cursor/skills/minifg-verify/SKILL.md`) for the full checklist and report template.
