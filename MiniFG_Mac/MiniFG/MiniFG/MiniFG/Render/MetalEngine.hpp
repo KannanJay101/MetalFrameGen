@@ -19,6 +19,7 @@ public:
     void resize(uint32_t width, uint32_t height);
     void submitFrame(const void* pixels, uint32_t width, uint32_t height, size_t bytesPerRow);
     void renderFrame();
+    void setDisplayRefreshPeriod(double seconds);
 
 private:
     void buildPipelines();
@@ -58,6 +59,7 @@ private:
     double m_prevSubmitTime    = 0;    // when previous frame was captured
     double m_presentStart      = 0;    // when we started blending prev→curr
     double m_estimatedInterval = 1.0 / 60.0; // smoothed capture interval
+    double m_displayInterval   = 0;    // display refresh period; 0 = unknown
     bool   m_hasPrevFrame      = false; // true after ≥2 frames received
 
     // FPS display

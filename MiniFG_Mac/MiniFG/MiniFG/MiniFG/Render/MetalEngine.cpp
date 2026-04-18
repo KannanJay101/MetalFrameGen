@@ -59,6 +59,12 @@ void MetalEngine::resize(uint32_t width, uint32_t height)
     resizeLocked(width, height);
 }
 
+void MetalEngine::setDisplayRefreshPeriod(double seconds)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_displayInterval = seconds;
+}
+
 void MetalEngine::resizeLocked(uint32_t width, uint32_t height)
 {
     if (m_width == width && m_height == height) return;
@@ -143,7 +149,15 @@ void MetalEngine::renderFrame()
         if (prevTex) prevTex->retain();
         if (outputTex) outputTex->retain();
 
-        if (m_hasPrevFrame && m_interpPSO && outputTex && prevTex && currentTex) {
+        // Only interpolate when display rate exceeds capture rate. At matched
+        // rates, each vsync shows a phase-dependent crossfade (prev↔curr with
+        // wobbling factor) which reads as ghosting/judder. The 0.95 margin
+        // prevents flicker when the two rates are nearly equal.
+        bool displayFasterThanCapture =
+            (m_displayInterval > 0 && m_displayInterval < m_estimatedInterval * 0.95);
+
+        if (displayFasterThanCapture &&
+            m_hasPrevFrame && m_interpPSO && outputTex && prevTex && currentTex) {
             double now = currentTime();
             double elapsed = now - m_presentStart;
             double t = elapsed / m_estimatedInterval;

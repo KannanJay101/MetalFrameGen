@@ -1,3 +1,5 @@
+import AppKit
+import Foundation
 import ScreenCaptureKit
 import CoreMedia
 import CoreVideo
@@ -6,90 +8,73 @@ typealias FrameBufferCallback = (CVPixelBuffer, UInt32, UInt32) -> Void
 
 /// Tracks capture statistics for display in the UI.
 final class CaptureStats: ObservableObject, Sendable {
-    // Atomically updated from the capture queue
-    private let _capturedFrames = OSAtomicCounter()
-    private let _renderedFrames = OSAtomicCounter()
-    private let _lastCaptureWidth = OSAtomicInt()
-    private let _lastCaptureHeight = OSAtomicInt()
-    private let _captureStartTime = OSAtomicDouble()
-    private let _lastFPSSample = OSAtomicDouble()
-    private let _lastFPSFrameCount = OSAtomicCounter()
+    private struct State {
+        var capturedFrames = 0
+        var renderedFrames = 0
+        var lastCaptureWidth = 0
+        var lastCaptureHeight = 0
+        var captureStartTime = 0.0
+        var lastFPSSample = 0.0
+        var lastFPSFrameCount = 0
+    }
 
-    var capturedFrames: Int { _capturedFrames.value }
-    var renderedFrames: Int { _renderedFrames.value }
-    var lastCaptureWidth: Int { _lastCaptureWidth.value }
-    var lastCaptureHeight: Int { _lastCaptureHeight.value }
+    private let lock = NSLock()
+    private var state = State()
+
+    var capturedFrames: Int { withState { $0.capturedFrames } }
+    var renderedFrames: Int { withState { $0.renderedFrames } }
+    var lastCaptureWidth: Int { withState { $0.lastCaptureWidth } }
+    var lastCaptureHeight: Int { withState { $0.lastCaptureHeight } }
 
     var captureFPS: Double {
         let now = CFAbsoluteTimeGetCurrent()
-        let elapsed = now - _lastFPSSample.value
+        let snapshot = withState { $0 }
+        let elapsed = now - snapshot.lastFPSSample
         guard elapsed > 0.001 else { return 0 }
-        let frames = _capturedFrames.value - _lastFPSFrameCount.value
+        let frames = snapshot.capturedFrames - snapshot.lastFPSFrameCount
         return Double(frames) / elapsed
     }
 
     func recordCapture(width: Int, height: Int) {
-        _capturedFrames.increment()
-        _lastCaptureWidth.set(width)
-        _lastCaptureHeight.set(height)
-
-        if _captureStartTime.value == 0 {
+        withState {
             let now = CFAbsoluteTimeGetCurrent()
-            _captureStartTime.set(now)
-            _lastFPSSample.set(now)
+            $0.capturedFrames += 1
+            $0.lastCaptureWidth = width
+            $0.lastCaptureHeight = height
+
+            if $0.captureStartTime == 0 {
+                $0.captureStartTime = now
+                $0.lastFPSSample = now
+            }
         }
     }
 
     func recordRender() {
-        _renderedFrames.increment()
+        withState { $0.renderedFrames += 1 }
     }
 
     func sampleFPS() -> Double {
         let now = CFAbsoluteTimeGetCurrent()
-        let elapsed = now - _lastFPSSample.value
-        guard elapsed > 0.001 else { return 0 }
-        let frames = _capturedFrames.value - _lastFPSFrameCount.value
-        let fps = Double(frames) / elapsed
-        _lastFPSSample.set(now)
-        _lastFPSFrameCount.set(_capturedFrames.value)
-        return fps
+        return withState {
+            let elapsed = now - $0.lastFPSSample
+            guard elapsed > 0.001 else { return 0 }
+            let frames = $0.capturedFrames - $0.lastFPSFrameCount
+            let fps = Double(frames) / elapsed
+            $0.lastFPSSample = now
+            $0.lastFPSFrameCount = $0.capturedFrames
+            return fps
+        }
     }
 
     func reset() {
-        _capturedFrames.set(0)
-        _renderedFrames.set(0)
-        _lastCaptureWidth.set(0)
-        _lastCaptureHeight.set(0)
-        _captureStartTime.set(0)
-        _lastFPSSample.set(0)
-        _lastFPSFrameCount.set(0)
+        withState { $0 = State() }
     }
-}
 
-// Lock-free atomic helpers for cross-thread stats
-private final class OSAtomicCounter: Sendable {
-    private let storage = UnsafeMutablePointer<Int>.allocate(capacity: 1)
-    init() { storage.initialize(to: 0) }
-    deinit { storage.deallocate() }
-    var value: Int { storage.pointee }
-    func increment() { OSAtomicIncrement64(UnsafeMutablePointer<Int64>(OpaquePointer(storage))) }
-    func set(_ v: Int) { storage.pointee = v }
-}
-
-private final class OSAtomicInt: Sendable {
-    private let storage = UnsafeMutablePointer<Int>.allocate(capacity: 1)
-    init() { storage.initialize(to: 0) }
-    deinit { storage.deallocate() }
-    var value: Int { storage.pointee }
-    func set(_ v: Int) { storage.pointee = v }
-}
-
-private final class OSAtomicDouble: Sendable {
-    private let storage = UnsafeMutablePointer<Double>.allocate(capacity: 1)
-    init() { storage.initialize(to: 0) }
-    deinit { storage.deallocate() }
-    var value: Double { storage.pointee }
-    func set(_ v: Double) { storage.pointee = v }
+    private func withState<T>(_ body: (inout State) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&state)
+    }
 }
 
 /// Manages an SCStream for a single SCWindow and vends captured frames
@@ -101,24 +86,25 @@ final class StreamManager: NSObject {
     let stats = CaptureStats()
     private let outputQueue = DispatchQueue(
         label: "com.minifg.capture",
-        qos: .userInteractive
+        qos: .userInitiated
     )
 
     func start(window: SCWindow, callback: @escaping FrameBufferCallback) async throws {
+        stats.reset()
         self.frameCallback = callback
 
         let filter = SCContentFilter(desktopIndependentWindow: window)
 
-        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let scale = captureScale(for: window)
         let config = SCStreamConfiguration()
-        config.width               = Int(window.frame.width * scale)
-        config.height              = Int(window.frame.height * scale)
+        config.width                = Int(window.frame.width * scale)
+        config.height               = Int(window.frame.height * scale)
         config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         config.pixelFormat          = kCVPixelFormatType_32BGRA
         config.showsCursor          = false
-        config.queueDepth           = 3
+        config.queueDepth           = 2
 
-        print("[StreamManager] Starting capture: \(config.width)x\(config.height) @ up to 60Hz")
+        print("[StreamManager] Starting capture: \(config.width)x\(config.height) at 60 FPS on scale \(String(format: "%.2f", scale))")
 
         let s = SCStream(filter: filter, configuration: config, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
@@ -131,6 +117,22 @@ final class StreamManager: NSObject {
         print("[StreamManager] Stopping capture. Total captured: \(stats.capturedFrames), rendered: \(stats.renderedFrames)")
         Task { try? await stream?.stopCapture() }
         stream = nil
+        frameCallback = nil
+    }
+
+    private func captureScale(for window: SCWindow) -> CGFloat {
+        guard let screen = NSScreen.screens.max(by: {
+            intersectionArea($0.frame, window.frame) < intersectionArea($1.frame, window.frame)
+        }) else {
+            return NSScreen.main?.backingScaleFactor ?? 2.0
+        }
+        return screen.backingScaleFactor
+    }
+
+    private func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let rect = lhs.intersection(rhs)
+        guard !rect.isNull, !rect.isEmpty else { return 0 }
+        return rect.width * rect.height
     }
 }
 
@@ -140,6 +142,7 @@ extension StreamManager: SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
+        guard frameStatus(for: sampleBuffer) == .complete else { return }
         guard type == .screen,
               let pixelBuffer = sampleBuffer.imageBuffer else { return }
 
@@ -157,6 +160,15 @@ extension StreamManager: SCStreamOutput {
         }
 
         frameCallback?(pixelBuffer, width, height)
+    }
+
+    private func frameStatus(for sampleBuffer: CMSampleBuffer) -> SCFrameStatus? {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+                as? [[SCStreamFrameInfo: Any]],
+              let statusRawValue = attachments.first?[.status] as? Int else {
+            return nil
+        }
+        return SCFrameStatus(rawValue: statusRawValue)
     }
 }
 

@@ -38,6 +38,10 @@
     _engine->renderFrame();
 }
 
+- (void)setDisplayRefreshPeriod:(double)seconds {
+    _engine->setDisplayRefreshPeriod(seconds);
+}
+
 - (uint64_t)renderCount {
     return _engine->m_renderCount.load(std::memory_order_relaxed);
 }

@@ -39,6 +39,10 @@ final class EngineBridge {
         native.renderFrame()
     }
 
+    func setDisplayRefreshPeriod(_ seconds: Double) {
+        native.setDisplayRefreshPeriod(seconds)
+    }
+
     var renderCount: UInt64 {
         native.renderCount()
     }

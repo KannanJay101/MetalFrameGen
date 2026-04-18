@@ -18,6 +18,10 @@ final class OverlayWindowController: NSObject {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var displayLinkContext: UnsafeMutableRawPointer?
+    private var displayLinkDisplayID: CGDirectDisplayID?
+    private var lastDrawablePixelSize: CGSize = .zero
+    private let resizePixelTolerance: CGFloat = 2.0
 
     init(frame: CGRect) {
         guard let dev = MTLCreateSystemDefaultDevice() else {
@@ -55,9 +59,14 @@ final class OverlayWindowController: NSObject {
         metalLayer.pixelFormat        = .bgra8Unorm
         metalLayer.framebufferOnly    = false
         metalLayer.isOpaque           = false
-        metalLayer.displaySyncEnabled = false   // uncapped — semaphore throttles in-flight frames
+        metalLayer.displaySyncEnabled = false
+        metalLayer.maximumDrawableCount = 2
+        metalLayer.presentsWithTransaction = false
+        metalLayer.allowsNextDrawableTimeout = false
         metalLayer.frame              = CGRect(origin: .zero, size: frame.size)
-        metalLayer.contentsScale      = NSScreen.main?.backingScaleFactor ?? 2.0
+        metalLayer.contentsScale      = window.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        lastDrawablePixelSize         = drawablePixelSize(for: frame.size, scale: metalLayer.contentsScale)
+        metalLayer.drawableSize       = lastDrawablePixelSize
         window.contentView?.wantsLayer = true
         window.contentView?.layer      = metalLayer
 
@@ -66,7 +75,7 @@ final class OverlayWindowController: NSObject {
 
     func show() {
         window.orderFrontRegardless()
-        startDisplayLink()
+        startDisplayLink(displayID: currentDisplayID())
         installHotkeyMonitors()
     }
 
@@ -111,12 +120,27 @@ final class OverlayWindowController: NSObject {
 
     // MARK: - CVDisplayLink (renders at display refresh rate)
 
-    private func startDisplayLink() {
+    private func startDisplayLink(displayID: CGDirectDisplayID? = nil) {
+        stopDisplayLink()
+
         guard CVDisplayLinkCreateWithActiveCGDisplays(&displayLink) == kCVReturnSuccess,
               let dl = displayLink else { return }
 
+        if let displayID = displayID ?? currentDisplayID() {
+            CVDisplayLinkSetCurrentCGDisplay(dl, displayID)
+            displayLinkDisplayID = displayID
+        } else {
+            displayLinkDisplayID = nil
+        }
+
+        let period = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(dl)
+        if period.timeScale > 0, period.timeValue > 0 {
+            engine.setDisplayRefreshPeriod(Double(period.timeValue) / Double(period.timeScale))
+        }
+
         // Pass a retained reference to the engine as the callback context.
         let engPtr = Unmanaged.passRetained(engine).toOpaque()
+        displayLinkContext = engPtr
 
         CVDisplayLinkSetOutputCallback(dl, {
             (_, _, _, _, _, context) -> CVReturn in
@@ -133,14 +157,48 @@ final class OverlayWindowController: NSObject {
         guard let dl = displayLink else { return }
         CVDisplayLinkStop(dl)
         displayLink = nil
-        // Balance the passRetained from startDisplayLink.
-        Unmanaged.passUnretained(engine).release()
+        displayLinkDisplayID = nil
+        if let context = displayLinkContext {
+            // Balance the passRetained from startDisplayLink.
+            Unmanaged<EngineBridge>.fromOpaque(context).release()
+            displayLinkContext = nil
+        }
     }
 
     func sync(to frame: CGRect) {
         window.setFrame(frame, display: true)
         metalLayer.frame = CGRect(origin: .zero, size: frame.size)
-        let scale = metalLayer.contentsScale
-        engine.resize(width: UInt32(frame.width * scale), height: UInt32(frame.height * scale))
+        let scale = window.screen?.backingScaleFactor ?? metalLayer.contentsScale
+        metalLayer.contentsScale = scale
+        let pixelSize = drawablePixelSize(for: frame.size, scale: scale)
+        if shouldResize(to: pixelSize) {
+            lastDrawablePixelSize = pixelSize
+            metalLayer.drawableSize = pixelSize
+            engine.resize(width: UInt32(max(CGFloat(1), pixelSize.width)),
+                          height: UInt32(max(CGFloat(1), pixelSize.height)))
+        }
+
+        let displayID = currentDisplayID()
+        if displayLink == nil || displayID != displayLinkDisplayID {
+            startDisplayLink(displayID: displayID)
+        }
+    }
+
+    private func currentDisplayID() -> CGDirectDisplayID? {
+        guard let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return nil
+        }
+        return CGDirectDisplayID(screenNumber.uint32Value)
+    }
+
+    private func drawablePixelSize(for size: CGSize, scale: CGFloat) -> CGSize {
+        CGSize(width: (size.width * scale).rounded(.toNearestOrAwayFromZero),
+               height: (size.height * scale).rounded(.toNearestOrAwayFromZero))
+    }
+
+    private func shouldResize(to pixelSize: CGSize) -> Bool {
+        guard lastDrawablePixelSize.width > 0, lastDrawablePixelSize.height > 0 else { return true }
+        return abs(pixelSize.width - lastDrawablePixelSize.width) >= resizePixelTolerance ||
+               abs(pixelSize.height - lastDrawablePixelSize.height) >= resizePixelTolerance
     }
 }

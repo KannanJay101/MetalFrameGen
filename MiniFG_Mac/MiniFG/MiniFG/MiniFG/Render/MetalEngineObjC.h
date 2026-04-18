@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
                        height:(uint32_t)height
                   bytesPerRow:(size_t)bytesPerRow;
 - (void)renderFrame;
+- (void)setDisplayRefreshPeriod:(double)seconds;
 - (uint64_t)renderCount;
 - (uint64_t)interpCount;
 
