@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild -scheme MiniFG -configuration Debug -destination 'platform=macOS' build)",
+      "Bash(xcodebuild -scheme MiniFG -configuration Debug build)"
+    ]
+  }
+}

@@ -8,9 +8,10 @@ Treat this repo as a **macOS Metal + ScreenCaptureKit** prototype for **frame ge
 
 When answering “does frame generation work?”, **verify the render path in source**, not marketing text.
 
-- **Capture:** Swift `StreamManager` / `SCStream` → `EngineBridge.submitFrame` → `MetalEngine::submitFrame` (upload to `m_inputTex`).
+- **Capture:** Swift `StreamManager` / `SCStream` → `EngineBridge.submitFrame` → `MetalEngine::submitFrame` (upload to `m_inputTex[m_writeIdx]`, record capture timestamp).
 - **Present:** `OverlayWindow` + `CVDisplayLink` drives `engine.renderFrame()` → `MetalEngine::renderFrame`.
-- **Interpolation today:** `MetalEngine::renderFrame` currently draws **`m_inputTex[m_readIdx]`** through the inline **fullscreen triangle shader** (passthrough). It does **not** call `Interpolator::interpolate` in that path. `Interpolator` is a **blit stub** (no `MTLFXFrameInterpolator` wired on public SDK). Until the engine invokes interpolation and produces a **synthesized intermediate** from **prev + curr** (or MetalFX where available), treat **true frame generation as not implemented**—only **capture + display** is.
+- **Interpolation:** `MetalEngine` uses a **triple-buffer ring** (`m_prevIdx`, `m_readIdx`, `m_writeIdx`). On each `renderFrame`, it computes a **temporal blend factor** from capture timestamps and dispatches a **`temporalBlend` Metal compute shader** that writes `mix(prev, curr, factor)` into `m_outputTex`. Intermediate frames (where 0.01 < factor < 0.99) are **synthesized GPU frames** not present in the capture stream — this is **real frame generation**. The fullscreen triangle shader then presents `m_outputTex`. When factor is near 0 or 1, the captured frame is shown directly (no compute dispatch). `Interpolator.mm` remains a **blit stub** (unused in the active render path; kept for future MetalFX integration).
+- **Exit:** `OverlayWindow` installs global + local `NSEvent` key monitors. Pressing **Escape** calls `onExitHotkey` → `AppState.stop()`, tearing down capture + overlay. The overlay is click-through (`ignoresMouseEvents = true`) so the target window remains interactive.
 
 If you change the render path, update this section in the same commit.
 
@@ -37,6 +38,7 @@ SwiftUI + ScreenCaptureKit (Swift), metal-cpp / Metal (C++), `CAMetalLayer`, `CV
 - Match existing naming and folder layout; avoid drive-by refactors.
 - ObjC selectors → Swift names: `configureWithLayer:` → `configure(with:)`, `resizeWidth:height:` → `resizeWidth(_:height:)`.
 - `NS_PRIVATE_IMPLEMENTATION` / `CA_` / `MTL_` **only** in one `.cpp` (currently `MetalEngine.cpp`).
+- **Do not cap the overlay at 60 FPS.** The whole point of frame generation is to increase FPS beyond what the capture source delivers. Keep `displaySyncEnabled = false` on the `CAMetalLayer` and use an in-flight semaphore (not VSync) for throttling. The render loop must be free to exceed 60 Hz on high-refresh-rate displays (e.g. 120 Hz ProMotion).
 
 ---
 

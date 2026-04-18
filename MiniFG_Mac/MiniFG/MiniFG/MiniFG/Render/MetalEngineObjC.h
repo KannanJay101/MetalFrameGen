@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
                   bytesPerRow:(size_t)bytesPerRow;
 - (void)renderFrame;
 - (uint64_t)renderCount;
+- (uint64_t)interpCount;
 
 @end
 

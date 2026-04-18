@@ -42,4 +42,8 @@ final class EngineBridge {
     var renderCount: UInt64 {
         native.renderCount()
     }
+
+    var interpCount: UInt64 {
+        native.interpCount()
+    }
 }

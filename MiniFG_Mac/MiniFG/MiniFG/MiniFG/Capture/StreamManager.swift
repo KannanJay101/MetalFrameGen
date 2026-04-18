@@ -113,12 +113,12 @@ final class StreamManager: NSObject {
         let config = SCStreamConfiguration()
         config.width               = Int(window.frame.width * scale)
         config.height              = Int(window.frame.height * scale)
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 120)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         config.pixelFormat          = kCVPixelFormatType_32BGRA
         config.showsCursor          = false
         config.queueDepth           = 3
 
-        print("[StreamManager] Starting capture: \(config.width)x\(config.height) @ up to 120Hz")
+        print("[StreamManager] Starting capture: \(config.width)x\(config.height) @ up to 60Hz")
 
         let s = SCStream(filter: filter, configuration: config, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)

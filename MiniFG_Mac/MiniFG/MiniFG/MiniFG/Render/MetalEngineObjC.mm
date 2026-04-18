@@ -42,4 +42,8 @@
     return _engine->m_renderCount.load(std::memory_order_relaxed);
 }
 
+- (uint64_t)interpCount {
+    return _engine->m_interpCount.load(std::memory_order_relaxed);
+}
+
 @end
