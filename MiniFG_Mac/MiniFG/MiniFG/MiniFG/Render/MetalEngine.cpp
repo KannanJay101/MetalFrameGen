@@ -45,6 +45,7 @@ double MetalEngine::currentTime() const
 
 void MetalEngine::configure(CA::MetalLayer* layer, uint32_t width, uint32_t height)
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_layer = layer;
     buildPipelines();
     buildComputePipeline();
@@ -54,6 +55,12 @@ void MetalEngine::configure(CA::MetalLayer* layer, uint32_t width, uint32_t heig
 
 void MetalEngine::resize(uint32_t width, uint32_t height)
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    resizeLocked(width, height);
+}
+
+void MetalEngine::resizeLocked(uint32_t width, uint32_t height)
+{
     if (m_width == width && m_height == height) return;
     buildResources(width, height);
 }
@@ -61,33 +68,31 @@ void MetalEngine::resize(uint32_t width, uint32_t height)
 void MetalEngine::submitFrame(const void* pixels, uint32_t width, uint32_t height,
                                size_t bytesPerRow)
 {
-    // Resize needs the lock (reads/modifies shared dimensions).
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (width != m_width || height != m_height)
-            resize(width, height);
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (width != m_width || height != m_height) {
+        resizeLocked(width, height);
     }
 
-    // Upload OUTSIDE the lock.  m_writeIdx is stable here because the render
-    // thread only rotates indices when m_frameReady is true, and we haven't
-    // set that flag yet.  This keeps the mutex unheld during the memcpy so the
-    // render thread is never blocked waiting for the copy to finish.
-    uploadToTexture(m_inputTex[m_writeIdx], pixels, width, height, bytesPerRow);
+    MTL::Texture* writeTex = m_inputTex[m_writeIdx];
+    if (!writeTex) {
+        return;
+    }
 
-    // Now take the lock briefly to record timing and signal readiness.
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        double now = currentTime();
-        m_prevSubmitTime = m_currSubmitTime;
-        m_currSubmitTime = now;
-        if (m_prevSubmitTime > 0) {
-            double interval = m_currSubmitTime - m_prevSubmitTime;
-            if (interval > 0.001 && interval < 0.5) {
-                m_estimatedInterval = m_estimatedInterval * 0.7 + interval * 0.3;
-            }
+    writeTex->retain();
+    uploadToTexture(writeTex, pixels, width, height, bytesPerRow);
+    writeTex->release();
+
+    double now = currentTime();
+    m_prevSubmitTime = m_currSubmitTime;
+    m_currSubmitTime = now;
+    if (m_prevSubmitTime > 0) {
+        double interval = m_currSubmitTime - m_prevSubmitTime;
+        if (interval > 0.001 && interval < 0.5) {
+            m_estimatedInterval = m_estimatedInterval * 0.7 + interval * 0.3;
         }
-        m_frameReady.store(true, std::memory_order_release);
     }
+    m_frameReady.store(true, std::memory_order_release);
 }
 
 void MetalEngine::renderFrame()
@@ -108,50 +113,54 @@ void MetalEngine::renderFrame()
 
     MTL::CommandBuffer* cmd = m_queue->commandBuffer();
 
-    bool newFrameArrived = false;
+    float blendFactor = 1.0f;
+    bool doInterpolate = false;
+    MTL::Texture* currentTex = nullptr;
+    MTL::Texture* prevTex = nullptr;
+    MTL::Texture* outputTex = nullptr;
+
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_frameReady.exchange(false, std::memory_order_acq_rel))
         {
             // Rotate triple buffer: old read → prev, old write → read, old prev → write
             int oldPrev  = m_prevIdx;
-            m_prevIdx    = m_readIdx;   // current becomes previous
-            m_readIdx    = m_writeIdx;  // fresh capture becomes current
-            m_writeIdx   = oldPrev;     // old prev slot freed for next capture
+            m_prevIdx    = m_readIdx;
+            m_readIdx    = m_writeIdx;
+            m_writeIdx   = oldPrev;
 
             if (m_prevSubmitTime > 0) {
                 m_hasPrevFrame = true;
             }
-            // Start interpolation presentation: blend from prev to curr over one capture interval
             m_presentStart = currentTime();
-            newFrameArrived = true;
+        }
+
+        currentTex = m_inputTex[m_readIdx];
+        prevTex = m_inputTex[m_prevIdx];
+        outputTex = m_outputTex;
+
+        if (currentTex) currentTex->retain();
+        if (prevTex) prevTex->retain();
+        if (outputTex) outputTex->retain();
+
+        if (m_hasPrevFrame && m_interpPSO && outputTex && prevTex && currentTex) {
+            double now = currentTime();
+            double elapsed = now - m_presentStart;
+            double t = elapsed / m_estimatedInterval;
+            blendFactor = std::min(std::max((float)t, 0.0f), 1.0f);
+            doInterpolate = (blendFactor > 0.01f && blendFactor < 0.99f);
         }
     }
 
-    // Compute interpolation blend factor
-    float blendFactor = 1.0f;
-    bool doInterpolate = false;
-
-    if (m_hasPrevFrame && m_interpPSO && m_outputTex) {
-        double now = currentTime();
-        double elapsed = now - m_presentStart;
-        double t = elapsed / m_estimatedInterval;
-        blendFactor = std::min(std::max((float)t, 0.0f), 1.0f);
-
-        // Only dispatch the compute shader for intermediate frames (not t≈0 or t≈1)
-        doInterpolate = (blendFactor > 0.01f && blendFactor < 0.99f);
-    }
-
-    // Determine which texture to display
-    MTL::Texture* displayTex = m_inputTex[m_readIdx];
+    MTL::Texture* displayTex = currentTex;
 
     if (doInterpolate) {
         // Dispatch temporal blend compute shader: mix(prev, curr, factor) → outputTex
         auto* compEnc = cmd->computeCommandEncoder();
         compEnc->setComputePipelineState(m_interpPSO);
-        compEnc->setTexture(m_inputTex[m_prevIdx], 0);
-        compEnc->setTexture(m_inputTex[m_readIdx], 1);
-        compEnc->setTexture(m_outputTex, 2);
+        compEnc->setTexture(prevTex, 0);
+        compEnc->setTexture(currentTex, 1);
+        compEnc->setTexture(outputTex, 2);
         compEnc->setBytes(&blendFactor, sizeof(float), 0);
 
         MTL::Size gridSize((m_width + 15) / 16, (m_height + 15) / 16, 1);
@@ -159,7 +168,7 @@ void MetalEngine::renderFrame()
         compEnc->dispatchThreadgroups(gridSize, tgSize);
         compEnc->endEncoding();
 
-        displayTex = m_outputTex;
+        displayTex = outputTex;
         m_interpCount.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -210,6 +219,10 @@ void MetalEngine::renderFrame()
     cmd->commit();
 
     m_renderCount.fetch_add(1, std::memory_order_relaxed);
+
+    if (currentTex) currentTex->release();
+    if (prevTex) prevTex->release();
+    if (outputTex) outputTex->release();
 
     pool->release();
 }

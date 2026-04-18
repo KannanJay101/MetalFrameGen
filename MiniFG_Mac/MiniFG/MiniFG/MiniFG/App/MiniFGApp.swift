@@ -270,6 +270,7 @@ final class AppState: ObservableObject {
     private var statsTimer: Timer?
     private var trackingTimer: Timer?
     private var targetWindowID: CGWindowID = 0
+    private var targetProcessID: pid_t?
     private var lastTrackedFrame: CGRect = .zero
     private var prevRenderCount: UInt64 = 0
     private var lastOutputFPSSample: CFAbsoluteTime = 0
@@ -354,6 +355,7 @@ final class AppState: ObservableObject {
         guard !isRunning else { return }
 
         self.targetWindowID = window.windowID
+        self.targetProcessID = window.owningApplication?.processID
 
         let overlayCtrl = OverlayWindowController(frame: window.frame)
         self.overlay = overlayCtrl
@@ -365,6 +367,7 @@ final class AppState: ObservableObject {
         }
 
         overlayCtrl.show()
+        reactivateTargetApplication()
 
         let mgr = StreamManager()
         self.stream = mgr
@@ -428,6 +431,12 @@ final class AppState: ObservableObject {
         captureResolution = w > 0 ? "\(w) x \(h)" : ""
     }
 
+    private func reactivateTargetApplication() {
+        guard let pid = targetProcessID,
+              let app = NSRunningApplication(processIdentifier: pid) else { return }
+        app.activate(options: [.activateIgnoringOtherApps])
+    }
+
     func stop() {
         trackingTimer?.invalidate()
         trackingTimer = nil
@@ -438,6 +447,7 @@ final class AppState: ObservableObject {
         stream = nil
         overlay = nil
         targetWindowID = 0
+        targetProcessID = nil
         lastTrackedFrame = .zero
         isRunning = false
         captureFPS = 0

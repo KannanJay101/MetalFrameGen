@@ -24,6 +24,7 @@ private:
     void buildPipelines();
     void buildComputePipeline();
     void buildResources(uint32_t width, uint32_t height);
+    void resizeLocked(uint32_t width, uint32_t height);
     void buildFontAtlas();
     void drawFPS(MTL::RenderCommandEncoder* enc, MTL::Texture* drawableTex);
     void uploadToTexture(MTL::Texture* tex, const void* pixels,
