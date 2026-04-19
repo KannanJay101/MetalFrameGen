@@ -45,6 +45,18 @@ double MetalEngine::currentTime() const
     return (double)mach_absolute_time() * m_timebaseScale;
 }
 
+bool MetalEngine::needsRender(float& blendFactorOut) const
+{
+    blendFactorOut = 1.0f;
+    bool displayFasterThanCapture =
+        (m_displayInterval > 0 && m_displayInterval < m_estimatedInterval * 0.95);
+    if (!m_hasPrevFrame || !displayFasterThanCapture) return false;
+    double elapsed = currentTime() - m_presentStart;
+    double t = elapsed / m_estimatedInterval;
+    blendFactorOut = std::min(std::max((float)t, 0.0f), 1.0f);
+    return (blendFactorOut > 0.01f && blendFactorOut < 0.99f);
+}
+
 void MetalEngine::configure(CA::MetalLayer* layer, uint32_t width, uint32_t height)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -122,6 +134,18 @@ void MetalEngine::submitFrame(const void* pixels, uint32_t width, uint32_t heigh
 
 void MetalEngine::renderFrame()
 {
+    // Early-exit: skip the whole pipeline (drawable acquire, blit, FPS overlay)
+    // when there's no new capture AND we're not mid-interpolation. Prevents the
+    // overlay from fighting the game for GPU time on redundant ticks (e.g. 60:60
+    // phase drift, paused/idle capture).
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        bool newFrame = m_frameReady.load(std::memory_order_acquire);
+        float unused;
+        bool midInterpolation = needsRender(unused);
+        if (!newFrame && !midInterpolation) return;
+    }
+
     // Throttle: wait until a previous frame finishes GPU work.
     // This caps in-flight frames to kMaxFramesInFlight, preventing
     // GPU queue flooding that starves the game of GPU time.
@@ -169,20 +193,13 @@ void MetalEngine::renderFrame()
         if (prevTex) prevTex->retain();
         if (outputTex) outputTex->retain();
 
-        // Only interpolate when display rate exceeds capture rate. At matched
-        // rates, each vsync shows a phase-dependent crossfade (prev↔curr with
-        // wobbling factor) which reads as ghosting/judder. The 0.95 margin
-        // prevents flicker when the two rates are nearly equal.
-        bool displayFasterThanCapture =
-            (m_displayInterval > 0 && m_displayInterval < m_estimatedInterval * 0.95);
-
-        if (displayFasterThanCapture &&
-            m_hasPrevFrame && m_interpPSO && outputTex && prevTex && currentTex) {
-            double now = currentTime();
-            double elapsed = now - m_presentStart;
-            double t = elapsed / m_estimatedInterval;
-            blendFactor = std::min(std::max((float)t, 0.0f), 1.0f);
-            doInterpolate = (blendFactor > 0.01f && blendFactor < 0.99f);
+        // Interpolate only when display rate exceeds capture rate (needsRender
+        // enforces the display>capture gate + hasPrevFrame). At matched rates
+        // each vsync would show a phase-dependent crossfade which reads as
+        // ghosting/judder — this path stays idle.
+        if (needsRender(blendFactor) &&
+            m_interpPSO && outputTex && prevTex && currentTex) {
+            doInterpolate = true;
         }
     }
 

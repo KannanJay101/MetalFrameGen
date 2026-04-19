@@ -32,6 +32,13 @@ private:
                          uint32_t width, uint32_t height, size_t bytesPerRow);
     double currentTime() const;
 
+    // Single source of truth for the "are we mid-interpolation?" gate shared by
+    // the early-exit in renderFrame and the interpolation dispatch. Caller holds
+    // m_mutex. Returns true when 0.01 < blend < 0.99 AND display is faster than
+    // capture AND we have a previous frame. Writes the clamped blend factor to
+    // blendFactorOut in all cases.
+    bool needsRender(float& blendFactorOut) const;
+
     MTL::Device*        m_device   = nullptr;
     MTL::CommandQueue*  m_queue    = nullptr;
     CA::MetalLayer*     m_layer    = nullptr;
