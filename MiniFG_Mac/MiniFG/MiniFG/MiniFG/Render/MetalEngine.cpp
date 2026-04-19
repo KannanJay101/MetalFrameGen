@@ -48,8 +48,10 @@ double MetalEngine::currentTime() const
 bool MetalEngine::needsRender(float& blendFactorOut) const
 {
     blendFactorOut = 1.0f;
+    // Require display ≥ ~1.33× capture rate. Rules out 60:60 jitter flapping
+    // (which reads as ghosting) while still firing on ProMotion 120:60.
     bool displayFasterThanCapture =
-        (m_displayInterval > 0 && m_displayInterval < m_estimatedInterval * 0.95);
+        (m_displayInterval > 0 && m_displayInterval < m_estimatedInterval * 0.75);
     if (!m_hasPrevFrame || !displayFasterThanCapture) return false;
     double elapsed = currentTime() - m_presentStart;
     double t = elapsed / m_estimatedInterval;
@@ -193,10 +195,10 @@ void MetalEngine::renderFrame()
         if (prevTex) prevTex->retain();
         if (outputTex) outputTex->retain();
 
-        // Interpolate only when display rate exceeds capture rate (needsRender
-        // enforces the display>capture gate + hasPrevFrame). At matched rates
-        // each vsync would show a phase-dependent crossfade which reads as
-        // ghosting/judder — this path stays idle.
+        // Interpolate only when display rate meaningfully exceeds capture rate
+        // — needsRender requires display ≤ capture × 0.75 (i.e. display ≥
+        // ~1.33× capture), which rules out 60:60 jitter while still firing on
+        // 120:60. At matched rates a crossfade produces ghosting.
         if (needsRender(blendFactor) &&
             m_interpPSO && outputTex && prevTex && currentTex) {
             doInterpolate = true;
