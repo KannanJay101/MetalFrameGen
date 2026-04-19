@@ -29,7 +29,9 @@ MetalEngine::~MetalEngine()
     for (int i = 0; i < kBufferCount; ++i)
         if (m_inputTex[i]) m_inputTex[i]->release();
 
-    if (m_outputTex) m_outputTex->release();
+    for (int i = 0; i < kMaxFramesInFlight; ++i)
+        if (m_outputTex[i]) m_outputTex[i]->release();
+
     if (m_blitPSO)   m_blitPSO->release();
     if (m_textPSO)   m_textPSO->release();
     if (m_interpPSO) m_interpPSO->release();
@@ -74,31 +76,48 @@ void MetalEngine::resizeLocked(uint32_t width, uint32_t height)
 void MetalEngine::submitFrame(const void* pixels, uint32_t width, uint32_t height,
                                size_t bytesPerRow)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    MTL::Texture* writeTex = nullptr;
+    int writeIdxAtStart = -1;
 
-    if (width != m_width || height != m_height) {
-        resizeLocked(width, height);
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        if (width != m_width || height != m_height) {
+            resizeLocked(width, height);
+        }
+
+        writeIdxAtStart = m_writeIdx;
+        writeTex = m_inputTex[writeIdxAtStart];
+        if (!writeTex) return;
+        writeTex->retain();
     }
 
-    MTL::Texture* writeTex = m_inputTex[m_writeIdx];
-    if (!writeTex) {
-        return;
-    }
-
-    writeTex->retain();
+    // CPU memcpy outside the lock — lets renderFrame run concurrently. Safe
+    // because submitFrame is single-writer (capture serial queue) and
+    // renderFrame only rotates the ring when m_frameReady is true, which we
+    // don't set until after the upload completes.
     uploadToTexture(writeTex, pixels, width, height, bytesPerRow);
-    writeTex->release();
 
-    double now = currentTime();
-    m_prevSubmitTime = m_currSubmitTime;
-    m_currSubmitTime = now;
-    if (m_prevSubmitTime > 0) {
-        double interval = m_currSubmitTime - m_prevSubmitTime;
-        if (interval > 0.001 && interval < 0.5) {
-            m_estimatedInterval = m_estimatedInterval * 0.7 + interval * 0.3;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        // If resize() rebuilt the ring between the two lock scopes, our
+        // retained texture is orphaned. Drop this frame rather than publish it.
+        if (m_writeIdx == writeIdxAtStart && m_inputTex[writeIdxAtStart] == writeTex) {
+            double now = currentTime();
+            m_prevSubmitTime = m_currSubmitTime;
+            m_currSubmitTime = now;
+            if (m_prevSubmitTime > 0) {
+                double interval = m_currSubmitTime - m_prevSubmitTime;
+                if (interval > 0.001 && interval < 0.5) {
+                    m_estimatedInterval = m_estimatedInterval * 0.7 + interval * 0.3;
+                }
+            }
+            m_frameReady.store(true, std::memory_order_release);
         }
     }
-    m_frameReady.store(true, std::memory_order_release);
+
+    writeTex->release();
 }
 
 void MetalEngine::renderFrame()
@@ -143,7 +162,8 @@ void MetalEngine::renderFrame()
 
         currentTex = m_inputTex[m_readIdx];
         prevTex = m_inputTex[m_prevIdx];
-        outputTex = m_outputTex;
+        outputTex = m_outputTex[m_outputSlot];
+        m_outputSlot = (m_outputSlot + 1) % kMaxFramesInFlight;
 
         if (currentTex) currentTex->retain();
         if (prevTex) prevTex->retain();
@@ -387,15 +407,18 @@ void MetalEngine::buildResources(uint32_t width, uint32_t height)
         assert(m_inputTex[i]);
     }
 
-    // Interpolation output texture
-    if (m_outputTex) m_outputTex->release();
+    // Interpolation output textures — one per in-flight slot so two command
+    // buffers can run concurrently without write/read hazards on a shared tex.
+    for (int i = 0; i < kMaxFramesInFlight; ++i)
     {
+        if (m_outputTex[i]) m_outputTex[i]->release();
+
         auto* td = MTL::TextureDescriptor::texture2DDescriptor(
             MTL::PixelFormatBGRA8Unorm, width, height, false);
         td->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageShaderWrite);
         td->setStorageMode(MTL::StorageModePrivate);
-        m_outputTex = m_device->newTexture(td);
-        assert(m_outputTex);
+        m_outputTex[i] = m_device->newTexture(td);
+        assert(m_outputTex[i]);
     }
 }
 

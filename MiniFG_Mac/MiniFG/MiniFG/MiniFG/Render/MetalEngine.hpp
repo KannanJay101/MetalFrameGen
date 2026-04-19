@@ -43,8 +43,13 @@ private:
     int                  m_readIdx  = 1;
     int                  m_prevIdx  = 2;
 
-    // Interpolation output texture
-    MTL::Texture*        m_outputTex = nullptr;
+    // In-flight frame throttle (prevents GPU queue flooding)
+    static constexpr int  kMaxFramesInFlight = 2;
+
+    // Per-in-flight output texture — avoids write/read hazard on a single
+    // shared texture when two command buffers are in flight on the same queue.
+    MTL::Texture*        m_outputTex[kMaxFramesInFlight] = {};
+    int                  m_outputSlot = 0;
 
     MTL::RenderPipelineState*  m_blitPSO    = nullptr;
     MTL::RenderPipelineState*  m_textPSO    = nullptr;
@@ -70,8 +75,6 @@ private:
     std::atomic<bool>     m_frameReady { false };
     std::mutex            m_mutex;
 
-    // In-flight frame throttle (prevents GPU queue flooding)
-    static constexpr int  kMaxFramesInFlight = 1;
     dispatch_semaphore_t  m_frameSemaphore = nullptr;
 
     // Cached mach timebase (avoids syscall per currentTime() call)
