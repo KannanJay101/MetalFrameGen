@@ -39,7 +39,7 @@ SwiftUI + ScreenCaptureKit (Swift), metal-cpp / Metal (C++), `CAMetalLayer`, `CV
 - Match existing naming and folder layout; avoid drive-by refactors.
 - ObjC selectors → Swift names: `configureWithLayer:` → `configure(with:)`, `resizeWidth:height:` → `resizeWidth(_:height:)`.
 - `NS_PRIVATE_IMPLEMENTATION` / `CA_` / `MTL_` **only** in one `.cpp` (currently `MetalEngine.cpp`).
-- **Do not cap the overlay at 60 FPS.** The whole point of frame generation is to increase FPS beyond what the capture source delivers. Keep `displaySyncEnabled = false` on the `CAMetalLayer` and use an in-flight semaphore (not VSync) for throttling. The render loop must be free to exceed 60 Hz on high-refresh-rate displays (e.g. 120 Hz ProMotion).
+- **Sync present to display refresh, not to 60 Hz.** Keep `displaySyncEnabled = true` on the `CAMetalLayer` — this caps presentation at *display refresh* (120 Hz on ProMotion, 60 Hz on standard displays), which is exactly the frame-generation target. Disabling it produces screen tearing without increasing useful FPS, since the display cannot physically show more than its refresh rate. CVDisplayLink drives render cadence at display refresh; the in-flight semaphore (`kMaxFramesInFlight = 2`) handles CPU/GPU pipelining.
 
 ---
 

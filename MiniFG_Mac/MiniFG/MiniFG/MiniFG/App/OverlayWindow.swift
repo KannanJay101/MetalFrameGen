@@ -59,7 +59,7 @@ final class OverlayWindowController: NSObject {
         metalLayer.pixelFormat        = .bgra8Unorm
         metalLayer.framebufferOnly    = false
         metalLayer.isOpaque           = false
-        metalLayer.displaySyncEnabled = false
+        metalLayer.displaySyncEnabled = true
         metalLayer.maximumDrawableCount = 2
         metalLayer.presentsWithTransaction = false
         metalLayer.allowsNextDrawableTimeout = false
