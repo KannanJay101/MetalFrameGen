@@ -397,10 +397,20 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/MiniFG/Render",
+					"$(SRCROOT)/MiniFG/Compute",
+					"$(SRCROOT)/ThirdParty/metal-cpp/metal-cpp",
+				);
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					Vision,
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFG;
@@ -409,11 +419,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "MiniFG/Render/MiniFG-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
-				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)/MiniFG/Render",
-					"$(SRCROOT)/MiniFG/Compute",
-					"$(SRCROOT)/ThirdParty/metal-cpp/metal-cpp",
-				);
 			};
 			name = Debug;
 		};
@@ -427,10 +432,20 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/MiniFG/Render",
+					"$(SRCROOT)/MiniFG/Compute",
+					"$(SRCROOT)/ThirdParty/metal-cpp/metal-cpp",
+				);
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					Vision,
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = organization.MiniFG;
@@ -439,11 +454,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "MiniFG/Render/MiniFG-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
-				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)/MiniFG/Render",
-					"$(SRCROOT)/MiniFG/Compute",
-					"$(SRCROOT)/ThirdParty/metal-cpp/metal-cpp",
-				);
 			};
 			name = Release;
 		};

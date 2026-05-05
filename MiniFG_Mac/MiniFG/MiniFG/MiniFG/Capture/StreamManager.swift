@@ -4,7 +4,7 @@ import ScreenCaptureKit
 import CoreMedia
 import CoreVideo
 
-typealias FrameBufferCallback = (CVPixelBuffer, UInt32, UInt32) -> Void
+typealias FrameBufferCallback = (CVPixelBuffer, UInt32, UInt32, Double) -> Void
 
 /// Tracks capture statistics for display in the UI.
 final class CaptureStats: ObservableObject, Sendable {
@@ -96,15 +96,16 @@ final class StreamManager: NSObject {
         let filter = SCContentFilter(desktopIndependentWindow: window)
 
         let scale = captureScale(for: window)
+        let targetFPS = captureFrameRate(for: window)
         let config = SCStreamConfiguration()
         config.width                = Int(window.frame.width * scale)
         config.height               = Int(window.frame.height * scale)
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
         config.pixelFormat          = kCVPixelFormatType_32BGRA
         config.showsCursor          = false
-        config.queueDepth           = 2
+        config.queueDepth           = targetFPS > 60 ? 4 : 3
 
-        print("[StreamManager] Starting capture: \(config.width)x\(config.height) at 60 FPS on scale \(String(format: "%.2f", scale))")
+        print("[StreamManager] Starting capture: \(config.width)x\(config.height) at \(targetFPS) FPS on scale \(String(format: "%.2f", scale))")
 
         let s = SCStream(filter: filter, configuration: config, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
@@ -121,12 +122,18 @@ final class StreamManager: NSObject {
     }
 
     private func captureScale(for window: SCWindow) -> CGFloat {
-        guard let screen = NSScreen.screens.max(by: {
+        screen(for: window)?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+    }
+
+    private func captureFrameRate(for window: SCWindow) -> Int {
+        let hz = screen(for: window)?.maximumFramesPerSecond ?? 60
+        return min(max(hz, 60), 240)
+    }
+
+    private func screen(for window: SCWindow) -> NSScreen? {
+        NSScreen.screens.max {
             intersectionArea($0.frame, window.frame) < intersectionArea($1.frame, window.frame)
-        }) else {
-            return NSScreen.main?.backingScaleFactor ?? 2.0
         }
-        return screen.backingScaleFactor
     }
 
     private func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
@@ -148,6 +155,8 @@ extension StreamManager: SCStreamOutput {
 
         let width  = UInt32(CVPixelBufferGetWidth(pixelBuffer))
         let height = UInt32(CVPixelBufferGetHeight(pixelBuffer))
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let captureTimestamp = pts.isValid ? CMTimeGetSeconds(pts) : 0.0
         stats.recordCapture(width: Int(width), height: Int(height))
 
         // Log first frame and every 300 frames after
@@ -159,7 +168,7 @@ extension StreamManager: SCStreamOutput {
             print("[StreamManager] Captured \(count) frames | \(width)x\(height) | ~\(String(format: "%.1f", fps)) capture FPS")
         }
 
-        frameCallback?(pixelBuffer, width, height)
+        frameCallback?(pixelBuffer, width, height, captureTimestamp)
     }
 
     private func frameStatus(for sampleBuffer: CMSampleBuffer) -> SCFrameStatus? {

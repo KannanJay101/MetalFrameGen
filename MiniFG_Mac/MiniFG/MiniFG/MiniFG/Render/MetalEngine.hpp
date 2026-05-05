@@ -1,4 +1,7 @@
 #pragma once
+#include "../Compute/VisionOpticalFlow.hpp"
+
+#include <CoreVideo/CoreVideo.h>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/QuartzCore.hpp>
 
@@ -12,24 +15,39 @@
 class MetalEngine
 {
 public:
+    enum class OpticalFlowDebugMode : uint32_t
+    {
+        Output     = 0,
+        Flow       = 1,
+        Confidence = 2,
+        Split      = 3,
+    };
+
     explicit MetalEngine(MTL::Device* device);
     ~MetalEngine();
 
     void configure(CA::MetalLayer* layer, uint32_t width, uint32_t height);
     void resize(uint32_t width, uint32_t height);
-    void submitFrame(const void* pixels, uint32_t width, uint32_t height, size_t bytesPerRow);
+    // Zero-copy submit: `tex` is an IOSurface-backed MTLTexture vended by
+    // CVMetalTextureCache on the Swift side. `keeper` is the CVMetalTextureRef
+    // (as an opaque CFTypeRef) that owns the IOSurface lifetime; the engine
+    // CFRetains it for as long as the slot holds the texture.
+    void submitTexture(MTL::Texture* tex,
+                       void* keeper,
+                       CVPixelBufferRef pixelBuffer,
+                       double captureTimestamp);
     void renderFrame();
     void setDisplayRefreshPeriod(double seconds);
+    void setOpticalFlowEnabled(bool enabled);
+    void setOpticalFlowDebugMode(uint32_t mode);
 
 private:
     void buildPipelines();
-    void buildComputePipeline();
+    void buildFlowPipelines();
     void buildResources(uint32_t width, uint32_t height);
     void resizeLocked(uint32_t width, uint32_t height);
     void buildFontAtlas();
     void drawFPS(MTL::RenderCommandEncoder* enc, MTL::Texture* drawableTex);
-    void uploadToTexture(MTL::Texture* tex, const void* pixels,
-                         uint32_t width, uint32_t height, size_t bytesPerRow);
     double currentTime() const;
 
     // Single source of truth for the "are we mid-interpolation?" gate shared by
@@ -46,22 +64,33 @@ private:
     // Triple-buffer: prev (N-1), read (N/current), write (next capture target)
     static constexpr int kBufferCount = 3;
     MTL::Texture*        m_inputTex[kBufferCount] = {};
+    // Parallel ring of CVMetalTextureRef (as opaque CFTypeRef). Each entry keeps
+    // its paired m_inputTex[i]'s IOSurface alive. CFRetained on install in
+    // submitTexture, CFReleased on replace/destruct.
+    void*                m_inputTexKeeper[kBufferCount] = {};
+    CVPixelBufferRef     m_inputPixelBuffer[kBufferCount] = {};
+    uint64_t             m_inputFrameID[kBufferCount] = {};
+    double               m_inputFrameTimestamp[kBufferCount] = {};
     int                  m_writeIdx = 0;
     int                  m_readIdx  = 1;
     int                  m_prevIdx  = 2;
+    uint64_t             m_nextFrameID = 1;
 
-    // In-flight frame throttle (prevents GPU queue flooding)
-    static constexpr int  kMaxFramesInFlight = 2;
-
-    // Per-in-flight output texture — avoids write/read hazard on a single
-    // shared texture when two command buffers are in flight on the same queue.
-    MTL::Texture*        m_outputTex[kMaxFramesInFlight] = {};
-    int                  m_outputSlot = 0;
+    // In-flight frame throttle (prevents GPU queue flooding while giving the
+    // display pipeline enough room to sustain high-refresh output).
+    static constexpr int  kMaxFramesInFlight = 3;
 
     MTL::RenderPipelineState*  m_blitPSO    = nullptr;
     MTL::RenderPipelineState*  m_textPSO    = nullptr;
-    MTL::ComputePipelineState* m_interpPSO  = nullptr;
+    MTL::RenderPipelineState*  m_interpPSO  = nullptr;
+    MTL::ComputePipelineState* m_flowConfidencePSO = nullptr;
+    MTL::ComputePipelineState* m_flowSynthesisPSO  = nullptr;
+    MTL::ComputePipelineState* m_flowDebugPSO      = nullptr;
+    MTL::ComputePipelineState* m_confidenceDebugPSO = nullptr;
     MTL::Texture*              m_fontAtlas  = nullptr;
+    MTL::Texture*              m_confidenceTex[kMaxFramesInFlight] = {};
+    MTL::Texture*              m_synthesizedTex[kMaxFramesInFlight] = {};
+    int                        m_flowOutputSlot = 0;
 
     uint32_t m_width  = 0;
     uint32_t m_height = 0;
@@ -86,8 +115,12 @@ private:
 
     // Cached mach timebase (avoids syscall per currentTime() call)
     double                m_timebaseScale = 0;
+    bool                  m_opticalFlowEnabled = true;
+    OpticalFlowDebugMode  m_opticalFlowDebugMode = OpticalFlowDebugMode::Output;
+    std::unique_ptr<VisionOpticalFlow> m_opticalFlow;
 
 public:
     std::atomic<uint64_t> m_renderCount { 0 };
     std::atomic<uint64_t> m_interpCount { 0 }; // frames where interpolation was used
+    std::atomic<uint64_t> m_flowInterpCount { 0 };
 };
