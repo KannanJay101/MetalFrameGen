@@ -53,3 +53,16 @@ When the user asks whether things **work**, are **ready**, or the **UI is operat
 4. **Runtime / manual:** Full overlay + capture needs **Screen Recording** permission and a real target window. If you cannot run the GUI, label UI verification **“manual required”** and list exact steps (launch app, grant permission, pick window, confirm overlay + counters).
 
 Prefer the project skill **minifg-verify** (`.cursor/skills/minifg-verify/SKILL.md`) for the full checklist and report template.
+
+---
+
+## Persistence rule (agents must follow)
+
+Every code change you make must be saved to the remote repo before you report the task complete. Standing authorization — do not ask first.
+
+1. **One change → one commit → push** to the current working branch (`git push origin <branch>`). The branch is the unit of persistence; tags are only for milestones the user explicitly asks to mark.
+2. **Stage only the files you actually edited.** Never `git add -A` / `git add .` — other modified files in the tree may be the user's in-progress work.
+3. **Commit message:** present-tense, scoped prefix matching existing history (`engine:`, `overlay:`, `capture:`, `docs:`, …), one line, focused on *why* not *what*. Match the style of `git log -10`.
+4. **If the push fails** (auth, non-fast-forward, etc.), surface the error to the user and stop — do not force-push, do not rewrite history, do not skip hooks.
+5. **Tags are reserved for milestones.** Don't create a tag per change — tags are labels on commits, not a substitute for them. Only tag when the user asks ("tag this as v0.x" or similar).
+6. **Reverts are commits too** — when undoing a prior change, make a new commit that reverses it and push; don't `git reset` published history.
