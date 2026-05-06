@@ -21,15 +21,19 @@ If you change the render path, update this section in the same commit.
 
 ```text
 MetalFrameGen/
-├── MiniFG_Mac/MiniFG/MiniFG/
-│   ├── MiniFG.xcodeproj/
-│   └── MiniFG/
-│       ├── App/           # MiniFGApp.swift — SwiftUI UI + AppState
-│       ├── Capture/       # WindowTracker, StreamManager
-│       ├── Render/        # MetalEngine (C++), EngineBridge, MetalEngineObjC
-│       ├── Compute/       # VisionOpticalFlow plus stale Interpolator stub
-│       └── Shaders/       # FlowWarp.metal optical-flow compute kernels
-└── ThirdParty/metal-cpp/  # Header search path in Xcode
+├── AGENTS.md              # Codex-facing repo orientation and command map
+├── claude.md              # Long-form AI context and verification rules
+└── MiniFG_Mac/MiniFG/MiniFG/
+    ├── MiniFG.xcodeproj/
+    ├── MiniFG/
+    │   ├── App/           # MiniFGApp.swift — SwiftUI UI + AppState
+    │   ├── Capture/       # WindowTracker, StreamManager
+    │   ├── Render/        # MetalEngine (C++), EngineBridge, MetalEngineObjC
+    │   ├── Compute/       # VisionOpticalFlow plus stale Interpolator stub
+    │   └── Shaders/       # FlowWarp.metal optical-flow compute kernels
+    ├── MiniFGTests/
+    ├── MiniFGUITests/
+    └── ThirdParty/metal-cpp/metal-cpp/  # Header search path in Xcode
 ```
 
 ## Stack
