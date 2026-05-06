@@ -126,8 +126,14 @@ final class StreamManager: NSObject {
     }
 
     private func captureFrameRate(for window: SCWindow) -> Int {
-        let hz = screen(for: window)?.maximumFramesPerSecond ?? 60
-        return min(max(hz, 60), 240)
+        let displayHz = screen(for: window)?.maximumFramesPerSecond ?? 60
+        guard displayHz >= 100 else { return 60 }
+
+        // Frame generation needs capture cadence below display cadence. Asking
+        // ScreenCaptureKit for the full ProMotion rate makes the engine see
+        // 120:120, so the interpolation gate correctly stays closed.
+        let sourceFPS = Int((Double(displayHz) * 0.5).rounded())
+        return min(max(sourceFPS, 60), 120)
     }
 
     private func screen(for window: SCWindow) -> NSScreen? {
