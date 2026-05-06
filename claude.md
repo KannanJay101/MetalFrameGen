@@ -4,6 +4,10 @@
 
 Treat this repo as a **macOS Metal + ScreenCaptureKit** prototype for **frame generation** (interpolation): capture a target window, process on GPU, present on a transparent overlay.
 
+## Current runtime status
+
+As of 2026-05-06, frame generation is **not working in the current software version**. Treat interpolation as blocked until the verification checklist below proves that the overlay is generating interpolated frames at runtime.
+
 ## Truth in code (keep this current)
 
 When answering “does frame generation work?”, **verify the render path in source**, not marketing text.
@@ -23,6 +27,7 @@ If you change the render path, update this section in the same commit.
 MetalFrameGen/
 ├── AGENTS.md              # Codex-facing repo orientation and command map
 ├── claude.md              # Long-form AI context and verification rules
+├── STATUS.md              # Dated runtime status log
 └── MiniFG_Mac/MiniFG/MiniFG/
     ├── MiniFG.xcodeproj/
     ├── MiniFG/

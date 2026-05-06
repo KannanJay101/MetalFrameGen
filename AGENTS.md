@@ -8,6 +8,7 @@ Use this file as the first stop for repository orientation. The fuller historica
 MetalFrameGen/
 ├── AGENTS.md
 ├── claude.md
+├── STATUS.md
 └── MiniFG_Mac/MiniFG/MiniFG/
     ├── MiniFG.xcodeproj/        # Xcode project; keep paths in sync with moves
     ├── MiniFG/                  # App target source root
@@ -31,6 +32,7 @@ MetalFrameGen/
 - `MiniFG_Mac/MiniFG/MiniFG/MiniFG/Render/MetalEngine.cpp`: active renderer and interpolation decision path.
 - `MiniFG_Mac/MiniFG/MiniFG/MiniFG/Compute/VisionOpticalFlow.mm`: Vision optical-flow worker.
 - `MiniFG_Mac/MiniFG/MiniFG/MiniFG/Shaders/FlowWarp.metal`: optical-flow synthesis kernels.
+- `STATUS.md`: dated runtime status log; check before claiming frame generation works.
 
 ## Working Rules
 
