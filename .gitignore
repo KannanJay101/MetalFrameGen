@@ -16,8 +16,6 @@ xcuserdata/
 *.dSYM.zip
 *.dSYM
 DerivedData/
-.deriveddata/
-.codex-home/
 *.xccheckout
 *.xcscmblueprint
 *.gcno

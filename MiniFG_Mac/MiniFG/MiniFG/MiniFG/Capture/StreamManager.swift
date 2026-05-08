@@ -4,7 +4,7 @@ import ScreenCaptureKit
 import CoreMedia
 import CoreVideo
 
-typealias FrameBufferCallback = (CVPixelBuffer, UInt32, UInt32, Double) -> Void
+typealias FrameBufferCallback = (CVPixelBuffer, UInt32, UInt32) -> Void
 
 /// Tracks capture statistics for display in the UI.
 final class CaptureStats: ObservableObject, Sendable {
@@ -96,16 +96,15 @@ final class StreamManager: NSObject {
         let filter = SCContentFilter(desktopIndependentWindow: window)
 
         let scale = captureScale(for: window)
-        let targetFPS = captureFrameRate(for: window)
         let config = SCStreamConfiguration()
         config.width                = Int(window.frame.width * scale)
         config.height               = Int(window.frame.height * scale)
-        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         config.pixelFormat          = kCVPixelFormatType_32BGRA
         config.showsCursor          = false
-        config.queueDepth           = targetFPS > 60 ? 4 : 3
+        config.queueDepth           = 2
 
-        print("[StreamManager] Starting capture: \(config.width)x\(config.height) at \(targetFPS) FPS on scale \(String(format: "%.2f", scale))")
+        print("[StreamManager] Starting capture: \(config.width)x\(config.height) at 60 FPS on scale \(String(format: "%.2f", scale))")
 
         let s = SCStream(filter: filter, configuration: config, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
@@ -122,25 +121,12 @@ final class StreamManager: NSObject {
     }
 
     private func captureScale(for window: SCWindow) -> CGFloat {
-        screen(for: window)?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
-    }
-
-    private func captureFrameRate(for window: SCWindow) -> Int {
-        let displayHz = screen(for: window)?.maximumFramesPerSecond ?? 60
-        // Engine's interpolation gate requires display ≥ ~1.33× capture
-        // (MetalEngine::needsRender). Capturing at half the display rate keeps
-        // that gate open on every supported display — 60Hz → 30 capture / 60
-        // displayed (every other frame synthesized), 120Hz ProMotion → 60
-        // capture / 120 displayed. Capturing at the display rate (the previous
-        // 60Hz behavior) leaves the gate closed and no frames are generated.
-        let sourceFPS = Int((Double(displayHz) * 0.5).rounded())
-        return max(15, min(sourceFPS, 120))
-    }
-
-    private func screen(for window: SCWindow) -> NSScreen? {
-        NSScreen.screens.max {
+        guard let screen = NSScreen.screens.max(by: {
             intersectionArea($0.frame, window.frame) < intersectionArea($1.frame, window.frame)
+        }) else {
+            return NSScreen.main?.backingScaleFactor ?? 2.0
         }
+        return screen.backingScaleFactor
     }
 
     private func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
@@ -156,20 +142,12 @@ extension StreamManager: SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        // Accept both .complete (content changed) and .idle (unchanged but
-        // still a valid frame). Filtering out idle frames stalls the engine
-        // whenever the source is static — the interpolation cadence dies and
-        // output freezes. Idle pixel buffers carry the last good content, so
-        // the engine sees consistent timing and prev/curr stay aligned.
-        let status = frameStatus(for: sampleBuffer)
-        guard status == .complete || status == .idle else { return }
+        guard frameStatus(for: sampleBuffer) == .complete else { return }
         guard type == .screen,
               let pixelBuffer = sampleBuffer.imageBuffer else { return }
 
         let width  = UInt32(CVPixelBufferGetWidth(pixelBuffer))
         let height = UInt32(CVPixelBufferGetHeight(pixelBuffer))
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let captureTimestamp = pts.isValid ? CMTimeGetSeconds(pts) : 0.0
         stats.recordCapture(width: Int(width), height: Int(height))
 
         // Log first frame and every 300 frames after
@@ -181,7 +159,7 @@ extension StreamManager: SCStreamOutput {
             print("[StreamManager] Captured \(count) frames | \(width)x\(height) | ~\(String(format: "%.1f", fps)) capture FPS")
         }
 
-        frameCallback?(pixelBuffer, width, height, captureTimestamp)
+        frameCallback?(pixelBuffer, width, height)
     }
 
     private func frameStatus(for sampleBuffer: CMSampleBuffer) -> SCFrameStatus? {
