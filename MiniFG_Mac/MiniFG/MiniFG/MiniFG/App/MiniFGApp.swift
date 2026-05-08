@@ -96,6 +96,19 @@ struct SetupView: View {
                 .buttonStyle(.borderedProminent)
             }
 
+            // Output mode
+            HStack(alignment: .firstTextBaseline) {
+                Toggle("Show output in a normal window (debug)",
+                       isOn: $appState.previewWindowMode)
+                Spacer()
+            }
+            if appState.previewWindowMode {
+                Text("Output renders into a titled, resizable window so you can see frame generation directly. Disables the click-through overlay.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Divider()
 
             // Available windows list
@@ -289,6 +302,7 @@ final class AppState: ObservableObject {
     @Published var captureResolution: String = ""
     @Published var opticalFlowEnabled = true
     @Published var opticalFlowDebugMode: OpticalFlowDebugMode = .output
+    @Published var previewWindowMode: Bool = false
 
     private var overlay: OverlayWindowController?
     private var stream: StreamManager?
@@ -383,9 +397,11 @@ final class AppState: ObservableObject {
         self.targetWindowID = window.windowID
         self.targetProcessID = window.owningApplication?.processID
 
-        let overlayCtrl = OverlayWindowController(frame: window.frame)
+        let overlayFrame = tracker.currentFrame(for: window.windowID) ?? window.frame
+        let isPreview = previewWindowMode
+        let overlayCtrl = OverlayWindowController(frame: overlayFrame, previewMode: isPreview)
         self.overlay = overlayCtrl
-        self.lastTrackedFrame = window.frame
+        self.lastTrackedFrame = overlayFrame
         overlayCtrl.engine.setOpticalFlowEnabled(opticalFlowEnabled)
         overlayCtrl.engine.setOpticalFlowDebugMode(opticalFlowDebugMode)
 
@@ -395,7 +411,11 @@ final class AppState: ObservableObject {
         }
 
         overlayCtrl.show()
-        reactivateTargetApplication()
+        // In preview mode the user wants the preview window in front, so skip
+        // re-activating the target app.
+        if !isPreview {
+            reactivateTargetApplication()
+        }
 
         let mgr = StreamManager()
         self.stream = mgr
@@ -421,10 +441,13 @@ final class AppState: ObservableObject {
         }
 
         // Track the target window position/size at ~10 Hz so the overlay
-        // follows moves, resizes, and full-screen transitions.
-        trackingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.trackTargetWindow()
+        // follows moves, resizes, and full-screen transitions. Skip in preview
+        // mode — the preview window is user-positioned, not a target chase.
+        if !isPreview {
+            trackingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.trackTargetWindow()
+                }
             }
         }
     }

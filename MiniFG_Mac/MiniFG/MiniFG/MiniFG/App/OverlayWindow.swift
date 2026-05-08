@@ -3,8 +3,13 @@ import QuartzCore
 import Metal
 import CoreVideo
 
-/// Owns the transparent, borderless, click-through NSWindow that sits above
-/// the target game. Hosts a CAMetalLayer driven by a CVDisplayLink.
+/// Owns the NSWindow that hosts a CAMetalLayer driven by a CVDisplayLink.
+///
+/// Two modes:
+/// - Overlay (default): transparent, borderless, click-through, floats above
+///   the target game window.
+/// - Preview: titled, opaque, resizable normal window — useful for debugging
+///   so the engine output is visible regardless of the target window.
 final class OverlayWindowController: NSObject {
 
     let engine: EngineBridge
@@ -12,8 +17,10 @@ final class OverlayWindowController: NSObject {
     private var metalLayer: CAMetalLayer!
     private var displayLink: CVDisplayLink?
     private let device: MTLDevice
+    let previewMode: Bool
 
-    /// Called (on main thread) when the user presses the exit hotkey.
+    /// Called (on main thread) when the user presses the exit hotkey or closes
+    /// the preview window.
     var onExitHotkey: (() -> Void)?
 
     private var globalMonitor: Any?
@@ -23,12 +30,13 @@ final class OverlayWindowController: NSObject {
     private var lastDrawablePixelSize: CGSize = .zero
     private let resizePixelTolerance: CGFloat = 2.0
 
-    init(frame: CGRect) {
+    init(frame: CGRect, previewMode: Bool = false) {
         guard let dev = MTLCreateSystemDefaultDevice() else {
             fatalError("No Metal device available")
         }
         self.device = dev
         self.engine = EngineBridge(device: dev)
+        self.previewMode = previewMode
         super.init()
         buildWindow(frame)
     }
@@ -38,29 +46,44 @@ final class OverlayWindowController: NSObject {
     }
 
     private func buildWindow(_ frame: CGRect) {
-        let styleMask: NSWindow.StyleMask = [.borderless]
+        let styleMask: NSWindow.StyleMask = previewMode
+            ? [.titled, .closable, .resizable, .miniaturizable]
+            : [.borderless]
         window = NSWindow(
             contentRect: frame,
             styleMask:   styleMask,
             backing:     .buffered,
             defer:       false
         )
-        window.level               = .floating
-        window.isOpaque            = false
-        window.backgroundColor     = .clear
-        window.hasShadow           = false
-        window.ignoresMouseEvents  = true
-        window.hidesOnDeactivate   = false
-        window.sharingType         = .none
-        window.collectionBehavior  = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        if previewMode {
+            window.title              = "MiniFG — Output Preview"
+            window.level              = .normal
+            window.isOpaque           = true
+            window.backgroundColor    = .black
+            window.hasShadow          = true
+            window.ignoresMouseEvents = false
+            window.collectionBehavior = [.fullScreenPrimary]
+            window.delegate           = self
+            window.contentMinSize     = NSSize(width: 320, height: 180)
+        } else {
+            window.level               = .floating
+            window.isOpaque            = false
+            window.backgroundColor     = .clear
+            window.hasShadow           = false
+            window.ignoresMouseEvents  = true
+            window.hidesOnDeactivate   = false
+            window.sharingType         = .none
+            window.collectionBehavior  = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        }
 
         metalLayer = CAMetalLayer()
         metalLayer.device             = device
         metalLayer.pixelFormat        = .bgra8Unorm
         metalLayer.framebufferOnly    = false
-        metalLayer.isOpaque           = false
+        metalLayer.isOpaque           = previewMode
         metalLayer.displaySyncEnabled = true
-        metalLayer.maximumDrawableCount = 2
+        metalLayer.maximumDrawableCount = 3
         metalLayer.presentsWithTransaction = false
         metalLayer.allowsNextDrawableTimeout = false
         metalLayer.frame              = CGRect(origin: .zero, size: frame.size)
@@ -74,7 +97,13 @@ final class OverlayWindowController: NSObject {
     }
 
     func show() {
-        window.orderFrontRegardless()
+        if previewMode {
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            window.orderFrontRegardless()
+        }
         startDisplayLink(displayID: currentDisplayID())
         installHotkeyMonitors()
     }
@@ -82,6 +111,7 @@ final class OverlayWindowController: NSObject {
     func close() {
         removeHotkeyMonitors()
         stopDisplayLink()
+        window.delegate = nil
         window.orderOut(nil)
     }
 
@@ -166,6 +196,9 @@ final class OverlayWindowController: NSObject {
     }
 
     func sync(to frame: CGRect) {
+        // Preview mode: the user owns the window; don't chase the target.
+        guard !previewMode else { return }
+
         window.setFrame(frame, display: true)
         metalLayer.frame = CGRect(origin: .zero, size: frame.size)
         let scale = window.screen?.backingScaleFactor ?? metalLayer.contentsScale
@@ -184,6 +217,20 @@ final class OverlayWindowController: NSObject {
         }
     }
 
+    private func syncMetalLayerToContentBounds() {
+        guard let contentView = window.contentView else { return }
+        let size = contentView.bounds.size
+        let scale = window.screen?.backingScaleFactor ?? metalLayer.contentsScale
+        metalLayer.frame = CGRect(origin: .zero, size: size)
+        metalLayer.contentsScale = scale
+        let pixelSize = drawablePixelSize(for: size, scale: scale)
+        guard shouldResize(to: pixelSize) else { return }
+        lastDrawablePixelSize = pixelSize
+        metalLayer.drawableSize = pixelSize
+        engine.resize(width: UInt32(max(CGFloat(1), pixelSize.width)),
+                      height: UInt32(max(CGFloat(1), pixelSize.height)))
+    }
+
     private func currentDisplayID() -> CGDirectDisplayID? {
         guard let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
             return nil
@@ -200,5 +247,35 @@ final class OverlayWindowController: NSObject {
         guard lastDrawablePixelSize.width > 0, lastDrawablePixelSize.height > 0 else { return true }
         return abs(pixelSize.width - lastDrawablePixelSize.width) >= resizePixelTolerance ||
                abs(pixelSize.height - lastDrawablePixelSize.height) >= resizePixelTolerance
+    }
+}
+
+// MARK: - Preview window delegate
+
+extension OverlayWindowController: NSWindowDelegate {
+    func windowDidResize(_ notification: Notification) {
+        guard previewMode else { return }
+        syncMetalLayerToContentBounds()
+    }
+
+    func windowDidChangeBackingProperties(_ notification: Notification) {
+        guard previewMode else { return }
+        syncMetalLayerToContentBounds()
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        guard previewMode else { return }
+        syncMetalLayerToContentBounds()
+        let displayID = currentDisplayID()
+        if displayID != displayLinkDisplayID {
+            startDisplayLink(displayID: displayID)
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard previewMode else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.onExitHotkey?()
+        }
     }
 }
