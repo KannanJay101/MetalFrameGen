@@ -127,13 +127,14 @@ final class StreamManager: NSObject {
 
     private func captureFrameRate(for window: SCWindow) -> Int {
         let displayHz = screen(for: window)?.maximumFramesPerSecond ?? 60
-        guard displayHz >= 100 else { return 60 }
-
-        // Frame generation needs capture cadence below display cadence. Asking
-        // ScreenCaptureKit for the full ProMotion rate makes the engine see
-        // 120:120, so the interpolation gate correctly stays closed.
+        // Engine's interpolation gate requires display ≥ ~1.33× capture
+        // (MetalEngine::needsRender). Capturing at half the display rate keeps
+        // that gate open on every supported display — 60Hz → 30 capture / 60
+        // displayed (every other frame synthesized), 120Hz ProMotion → 60
+        // capture / 120 displayed. Capturing at the display rate (the previous
+        // 60Hz behavior) leaves the gate closed and no frames are generated.
         let sourceFPS = Int((Double(displayHz) * 0.5).rounded())
-        return min(max(sourceFPS, 60), 120)
+        return max(15, min(sourceFPS, 120))
     }
 
     private func screen(for window: SCWindow) -> NSScreen? {
