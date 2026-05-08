@@ -156,7 +156,13 @@ extension StreamManager: SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        guard frameStatus(for: sampleBuffer) == .complete else { return }
+        // Accept both .complete (content changed) and .idle (unchanged but
+        // still a valid frame). Filtering out idle frames stalls the engine
+        // whenever the source is static — the interpolation cadence dies and
+        // output freezes. Idle pixel buffers carry the last good content, so
+        // the engine sees consistent timing and prev/curr stay aligned.
+        let status = frameStatus(for: sampleBuffer)
+        guard status == .complete || status == .idle else { return }
         guard type == .screen,
               let pixelBuffer = sampleBuffer.imageBuffer else { return }
 
