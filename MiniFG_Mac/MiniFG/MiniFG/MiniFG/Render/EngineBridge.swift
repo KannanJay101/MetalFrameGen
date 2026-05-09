@@ -20,18 +20,20 @@ final class EngineBridge {
         native.resizeWidth(width, height: height)
     }
 
-    func submitFrame(buffer: CVPixelBuffer, width: UInt32, height: UInt32) {
-        CVPixelBufferLockBaseAddress(buffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-
-        guard let baseAddr = CVPixelBufferGetBaseAddress(buffer) else { return }
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
-
+    /// Submit a captured frame. The CVPixelBuffer is forwarded to the engine
+    /// so the Vision optical-flow worker can compute (prev, curr) flow
+    /// asynchronously; the engine still does its own CPU upload to the input
+    /// texture ring so the crossfade fallback path keeps working when flow
+    /// isn't ready or is disabled.
+    func submitFrame(buffer: CVPixelBuffer,
+                     width: UInt32,
+                     height: UInt32,
+                     captureTimestamp: Double = 0) {
         native.submitFrame(
-            withPixels: baseAddr,
+            with: buffer,
             width: width,
             height: height,
-            bytesPerRow: bytesPerRow
+            captureTimestamp: captureTimestamp
         )
     }
 
@@ -43,11 +45,19 @@ final class EngineBridge {
         native.setDisplayRefreshPeriod(seconds)
     }
 
+    func setOpticalFlowEnabled(_ enabled: Bool) {
+        native.setOpticalFlowEnabled(enabled)
+    }
+
     var renderCount: UInt64 {
         native.renderCount()
     }
 
     var interpCount: UInt64 {
         native.interpCount()
+    }
+
+    var flowInterpCount: UInt64 {
+        native.flowInterpCount()
     }
 }

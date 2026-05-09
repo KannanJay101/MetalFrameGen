@@ -34,6 +34,13 @@
     _engine->submitFrame(pixels, width, height, bytesPerRow);
 }
 
+- (void)submitFrameWithPixelBuffer:(CVPixelBufferRef)pixelBuffer
+                             width:(uint32_t)width
+                            height:(uint32_t)height
+                  captureTimestamp:(double)captureTimestamp {
+    _engine->submitFrame(pixelBuffer, width, height, captureTimestamp);
+}
+
 - (void)renderFrame {
     _engine->renderFrame();
 }
@@ -42,12 +49,20 @@
     _engine->setDisplayRefreshPeriod(seconds);
 }
 
+- (void)setOpticalFlowEnabled:(BOOL)enabled {
+    _engine->setOpticalFlowEnabled(enabled ? true : false);
+}
+
 - (uint64_t)renderCount {
     return _engine->m_renderCount.load(std::memory_order_relaxed);
 }
 
 - (uint64_t)interpCount {
     return _engine->m_interpCount.load(std::memory_order_relaxed);
+}
+
+- (uint64_t)flowInterpCount {
+    return _engine->m_flowInterpCount.load(std::memory_order_relaxed);
 }
 
 @end

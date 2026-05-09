@@ -187,13 +187,25 @@ struct RunningView: View {
                     StatRow(label: "Frames Captured", value: "\(appState.capturedFrames)")
                     StatRow(label: "Frames Rendered", value: "\(appState.renderedFrames)")
                     StatRow(label: "Interpolated", value: "\(appState.interpolatedFrames)")
+                    StatRow(label: "Flow Frames", value: "\(appState.flowInterpolatedFrames)")
                     StatRow(label: "Resolution",
                             value: appState.captureResolution.isEmpty ? "---" : appState.captureResolution)
                     StatRow(label: "Status",
-                            value: appState.interpolatedFrames > 0
-                                ? "Interpolating"
+                            value: appState.flowInterpolatedFrames > 0
+                                ? "Optical-flow synthesis"
+                                : appState.interpolatedFrames > 0
+                                ? "Crossfade fallback"
                                 : appState.capturedFrames > 0 ? "Receiving frames" : "Waiting for frames...")
                 }
+                .padding(.vertical, 4)
+            }
+
+            GroupBox("Optical Flow") {
+                Toggle("Enable Vision optical-flow synthesis",
+                       isOn: Binding(
+                           get: { appState.opticalFlowEnabled },
+                           set: { appState.setOpticalFlowEnabled($0) }
+                       ))
                 .padding(.vertical, 4)
             }
 
@@ -262,7 +274,9 @@ final class AppState: ObservableObject {
     @Published var capturedFrames: Int = 0
     @Published var renderedFrames: Int = 0
     @Published var interpolatedFrames: Int = 0
+    @Published var flowInterpolatedFrames: Int = 0
     @Published var captureResolution: String = ""
+    @Published var opticalFlowEnabled: Bool = true
 
     private var overlay: OverlayWindowController?
     private var stream: StreamManager?
@@ -360,6 +374,7 @@ final class AppState: ObservableObject {
         let overlayCtrl = OverlayWindowController(frame: window.frame)
         self.overlay = overlayCtrl
         self.lastTrackedFrame = window.frame
+        overlayCtrl.engine.setOpticalFlowEnabled(opticalFlowEnabled)
 
         // Wire up the escape hotkey to stop capture
         overlayCtrl.onExitHotkey = { [weak self] in
@@ -415,6 +430,7 @@ final class AppState: ObservableObject {
         let currentRender = overlay?.engine.renderCount ?? 0
         renderedFrames = Int(currentRender)
         interpolatedFrames = Int(overlay?.engine.interpCount ?? 0)
+        flowInterpolatedFrames = Int(overlay?.engine.flowInterpCount ?? 0)
 
         // Compute output FPS from render count delta
         let now = CFAbsoluteTimeGetCurrent()
@@ -437,6 +453,11 @@ final class AppState: ObservableObject {
         app.activate(options: [.activateIgnoringOtherApps])
     }
 
+    func setOpticalFlowEnabled(_ enabled: Bool) {
+        opticalFlowEnabled = enabled
+        overlay?.engine.setOpticalFlowEnabled(enabled)
+    }
+
     func stop() {
         trackingTimer?.invalidate()
         trackingTimer = nil
@@ -455,6 +476,7 @@ final class AppState: ObservableObject {
         capturedFrames = 0
         renderedFrames = 0
         interpolatedFrames = 0
+        flowInterpolatedFrames = 0
         captureResolution = ""
         errorMessage = ""
     }

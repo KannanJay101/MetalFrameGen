@@ -1,6 +1,7 @@
 #pragma once
 #include <Metal/Metal.hpp>
 #include <QuartzCore/QuartzCore.hpp>
+#include <CoreVideo/CoreVideo.h>
 
 #include <cstdint>
 #include <memory>
@@ -8,6 +9,8 @@
 #include <mutex>
 #include <cmath>
 #include <dispatch/dispatch.h>
+
+#include "../Compute/VisionOpticalFlow.hpp"
 
 class MetalEngine
 {
@@ -17,13 +20,28 @@ public:
 
     void configure(CA::MetalLayer* layer, uint32_t width, uint32_t height);
     void resize(uint32_t width, uint32_t height);
+
+    // Original CPU-upload submit (kept for any caller that doesn't have a
+    // CVPixelBuffer in hand). Routes through the same pixel-upload path; the
+    // optical-flow worker is bypassed because Vision needs a CVPixelBuffer.
     void submitFrame(const void* pixels, uint32_t width, uint32_t height, size_t bytesPerRow);
+
+    // Preferred submit path. Uploads pixels to the input ring AND enqueues the
+    // (prev, curr) pair to the Vision optical-flow worker so synthesis can run
+    // asynchronously. captureTimestamp is informational metadata.
+    void submitFrame(CVPixelBufferRef buffer,
+                     uint32_t width,
+                     uint32_t height,
+                     double captureTimestamp);
+
     void renderFrame();
     void setDisplayRefreshPeriod(double seconds);
+    void setOpticalFlowEnabled(bool enabled);
 
 private:
     void buildPipelines();
     void buildComputePipeline();
+    void buildFlowPipelines();
     void buildResources(uint32_t width, uint32_t height);
     void resizeLocked(uint32_t width, uint32_t height);
     void buildFontAtlas();
@@ -43,13 +61,32 @@ private:
     int                  m_readIdx  = 1;
     int                  m_prevIdx  = 2;
 
-    // Interpolation output texture
+    // Per-slot CVPixelBuffer + frame ID, used by the optical-flow worker to
+    // correlate async results back to the (prev, curr) pair that produced them.
+    CVPixelBufferRef     m_inputPixelBuffer[kBufferCount] = {};
+    uint64_t             m_inputFrameID[kBufferCount] = {};
+    double               m_inputFrameTimestamp[kBufferCount] = {};
+    uint64_t             m_nextFrameID = 1;
+
+    // Crossfade fallback output texture
     MTL::Texture*        m_outputTex = nullptr;
+
+    // Optical-flow synthesis output ring (one per in-flight render frame so
+    // overlapping GPU work doesn't trample the same texture).
+    static constexpr int kMaxFramesInFlight = 1;
+    MTL::Texture*        m_synthesizedTex[kMaxFramesInFlight] = {};
+    MTL::Texture*        m_confidenceTex[kMaxFramesInFlight] = {};
+    int                  m_flowOutputSlot = 0;
 
     MTL::RenderPipelineState*  m_blitPSO    = nullptr;
     MTL::RenderPipelineState*  m_textPSO    = nullptr;
-    MTL::ComputePipelineState* m_interpPSO  = nullptr;
+    MTL::ComputePipelineState* m_interpPSO  = nullptr;          // existing crossfade
+    MTL::ComputePipelineState* m_flowConfidencePSO = nullptr;   // NEW: confidence mask
+    MTL::ComputePipelineState* m_flowSynthesisPSO  = nullptr;   // NEW: motion-aware warp
     MTL::Texture*              m_fontAtlas  = nullptr;
+
+    std::unique_ptr<VisionOpticalFlow> m_opticalFlow;
+    bool m_opticalFlowEnabled = true;
 
     uint32_t m_width  = 0;
     uint32_t m_height = 0;
@@ -71,7 +108,6 @@ private:
     std::mutex            m_mutex;
 
     // In-flight frame throttle (prevents GPU queue flooding)
-    static constexpr int  kMaxFramesInFlight = 1;
     dispatch_semaphore_t  m_frameSemaphore = nullptr;
 
     // Cached mach timebase (avoids syscall per currentTime() call)
@@ -79,5 +115,6 @@ private:
 
 public:
     std::atomic<uint64_t> m_renderCount { 0 };
-    std::atomic<uint64_t> m_interpCount { 0 }; // frames where interpolation was used
+    std::atomic<uint64_t> m_interpCount { 0 };       // any synthesized frame (flow or crossfade)
+    std::atomic<uint64_t> m_flowInterpCount { 0 };   // synthesized via Vision optical flow
 };

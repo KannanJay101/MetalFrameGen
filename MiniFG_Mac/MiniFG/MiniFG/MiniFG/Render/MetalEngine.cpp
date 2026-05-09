@@ -9,12 +9,30 @@
 #include <mach/mach_time.h>
 #include <algorithm>
 
+namespace {
+struct FlowConfidenceParams {
+    uint32_t hasReverseFlow     = 0;
+    float    consistencyBias    = 0.75f;
+    float    consistencyScale   = 0.10f;
+    float    fallbackConfidence = 0.65f;
+};
+
+struct FlowSynthesisParams {
+    float    blendFactor    = 0.0f;
+    uint32_t hasReverseFlow = 0;
+    uint32_t splitScreen    = 0;
+    uint32_t reserved       = 0;
+};
+}
+
 MetalEngine::MetalEngine(MTL::Device* device)
     : m_device(device)
 {
     m_device->retain();
     m_queue = m_device->newCommandQueue();
     assert(m_queue && "Failed to create MTLCommandQueue");
+
+    m_opticalFlow = std::make_unique<VisionOpticalFlow>(m_device);
 
     m_frameSemaphore = dispatch_semaphore_create(kMaxFramesInFlight);
 
@@ -26,14 +44,23 @@ MetalEngine::MetalEngine(MTL::Device* device)
 
 MetalEngine::~MetalEngine()
 {
-    for (int i = 0; i < kBufferCount; ++i)
+    for (int i = 0; i < kBufferCount; ++i) {
         if (m_inputTex[i]) m_inputTex[i]->release();
+        if (m_inputPixelBuffer[i]) CFRelease(m_inputPixelBuffer[i]);
+    }
+    for (int i = 0; i < kMaxFramesInFlight; ++i) {
+        if (m_synthesizedTex[i]) m_synthesizedTex[i]->release();
+        if (m_confidenceTex[i])  m_confidenceTex[i]->release();
+    }
 
     if (m_outputTex) m_outputTex->release();
     if (m_blitPSO)   m_blitPSO->release();
     if (m_textPSO)   m_textPSO->release();
     if (m_interpPSO) m_interpPSO->release();
+    if (m_flowConfidencePSO) m_flowConfidencePSO->release();
+    if (m_flowSynthesisPSO)  m_flowSynthesisPSO->release();
     if (m_fontAtlas)  m_fontAtlas->release();
+    m_opticalFlow.reset();
     if (m_queue)      m_queue->release();
     if (m_device)     m_device->release();
 }
@@ -49,8 +76,16 @@ void MetalEngine::configure(CA::MetalLayer* layer, uint32_t width, uint32_t heig
     m_layer = layer;
     buildPipelines();
     buildComputePipeline();
+    buildFlowPipelines();
     buildFontAtlas();
     buildResources(width, height);
+}
+
+void MetalEngine::setOpticalFlowEnabled(bool enabled)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_opticalFlowEnabled = enabled;
+    if (m_opticalFlow) m_opticalFlow->setEnabled(enabled);
 }
 
 void MetalEngine::resize(uint32_t width, uint32_t height)
@@ -89,6 +124,16 @@ void MetalEngine::submitFrame(const void* pixels, uint32_t width, uint32_t heigh
     uploadToTexture(writeTex, pixels, width, height, bytesPerRow);
     writeTex->release();
 
+    // Pixel-only path: clear any stale CVPixelBuffer in this slot so the flow
+    // worker doesn't try to use it.
+    int idx = m_writeIdx;
+    if (m_inputPixelBuffer[idx]) {
+        CFRelease(m_inputPixelBuffer[idx]);
+        m_inputPixelBuffer[idx] = nullptr;
+    }
+    m_inputFrameID[idx] = m_nextFrameID++;
+    m_inputFrameTimestamp[idx] = currentTime();
+
     double now = currentTime();
     m_prevSubmitTime = m_currSubmitTime;
     m_currSubmitTime = now;
@@ -99,6 +144,91 @@ void MetalEngine::submitFrame(const void* pixels, uint32_t width, uint32_t heigh
         }
     }
     m_frameReady.store(true, std::memory_order_release);
+}
+
+void MetalEngine::submitFrame(CVPixelBufferRef buffer,
+                              uint32_t width,
+                              uint32_t height,
+                              double captureTimestamp)
+{
+    if (!buffer) return;
+
+    VisionFlowPairMetadata flowPair {};
+    bool shouldEnqueueFlow = false;
+    CVPixelBufferRef prevFlowPixelBuffer = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        if (width != m_width || height != m_height) {
+            resizeLocked(width, height);
+        }
+
+        MTL::Texture* writeTex = m_inputTex[m_writeIdx];
+        if (!writeTex) {
+            return;
+        }
+
+        // Lock + CPU-upload to the input texture ring (preserves the existing
+        // crossfade fallback path). Vision optical flow operates on the
+        // CVPixelBuffer directly, so we don't need a Metal IOSurface alias here.
+        CVReturn lockStatus = CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+        if (lockStatus == kCVReturnSuccess) {
+            const void* pixels = CVPixelBufferGetBaseAddress(buffer);
+            size_t bytesPerRow = CVPixelBufferGetBytesPerRow(buffer);
+            if (pixels) {
+                writeTex->retain();
+                uploadToTexture(writeTex, pixels, width, height, bytesPerRow);
+                writeTex->release();
+            }
+            CVPixelBufferUnlockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+        }
+
+        // Per-slot bookkeeping: retain the pixel buffer + assign a frame ID.
+        int idx = m_writeIdx;
+        if (m_inputPixelBuffer[idx]) {
+            CFRelease(m_inputPixelBuffer[idx]);
+        }
+        m_inputPixelBuffer[idx] = (CVPixelBufferRef)CFRetain(buffer);
+        uint64_t frameID = m_nextFrameID++;
+        m_inputFrameID[idx] = frameID;
+        m_inputFrameTimestamp[idx] = captureTimestamp;
+
+        // Decide whether to enqueue an optical-flow pair. Need a prior frame
+        // with matching dimensions and an available worker.
+        if (m_opticalFlowEnabled &&
+            m_opticalFlow &&
+            m_opticalFlow->isAvailable() &&
+            m_inputPixelBuffer[m_readIdx] &&
+            m_inputFrameID[m_readIdx] != 0 &&
+            CVPixelBufferGetWidth(m_inputPixelBuffer[m_readIdx]) == width &&
+            CVPixelBufferGetHeight(m_inputPixelBuffer[m_readIdx]) == height) {
+            flowPair.prevFrameID   = m_inputFrameID[m_readIdx];
+            flowPair.currFrameID   = frameID;
+            flowPair.width         = width;
+            flowPair.height        = height;
+            flowPair.prevTimestamp = m_inputFrameTimestamp[m_readIdx];
+            flowPair.currTimestamp = captureTimestamp;
+            prevFlowPixelBuffer    = (CVPixelBufferRef)CFRetain(m_inputPixelBuffer[m_readIdx]);
+            shouldEnqueueFlow      = true;
+        }
+
+        double now = currentTime();
+        m_prevSubmitTime = m_currSubmitTime;
+        m_currSubmitTime = now;
+        if (m_prevSubmitTime > 0) {
+            double interval = m_currSubmitTime - m_prevSubmitTime;
+            if (interval > 0.001 && interval < 0.5) {
+                m_estimatedInterval = m_estimatedInterval * 0.7 + interval * 0.3;
+            }
+        }
+        m_frameReady.store(true, std::memory_order_release);
+    }
+
+    if (shouldEnqueueFlow && m_opticalFlow) {
+        m_opticalFlow->enqueueFlowPair(prevFlowPixelBuffer, buffer, flowPair);
+    }
+    if (prevFlowPixelBuffer) CFRelease(prevFlowPixelBuffer);
 }
 
 void MetalEngine::renderFrame()
@@ -121,9 +251,16 @@ void MetalEngine::renderFrame()
 
     float blendFactor = 1.0f;
     bool doInterpolate = false;
+    bool wantsOpticalFlow = false;
     MTL::Texture* currentTex = nullptr;
     MTL::Texture* prevTex = nullptr;
     MTL::Texture* outputTex = nullptr;
+    MTL::Texture* synthTex = nullptr;
+    MTL::Texture* confidenceTex = nullptr;
+    uint64_t prevFrameID = 0;
+    uint64_t currFrameID = 0;
+    uint32_t frameWidth = 0;
+    uint32_t frameHeight = 0;
 
     {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -142,8 +279,12 @@ void MetalEngine::renderFrame()
         }
 
         currentTex = m_inputTex[m_readIdx];
-        prevTex = m_inputTex[m_prevIdx];
-        outputTex = m_outputTex;
+        prevTex    = m_inputTex[m_prevIdx];
+        outputTex  = m_outputTex;
+        prevFrameID = m_inputFrameID[m_prevIdx];
+        currFrameID = m_inputFrameID[m_readIdx];
+        frameWidth  = m_width;
+        frameHeight = m_height;
 
         if (currentTex) currentTex->retain();
         if (prevTex) prevTex->retain();
@@ -164,12 +305,81 @@ void MetalEngine::renderFrame()
             blendFactor = std::min(std::max((float)t, 0.0f), 1.0f);
             doInterpolate = (blendFactor > 0.01f && blendFactor < 0.99f);
         }
+
+        wantsOpticalFlow = doInterpolate &&
+                           m_opticalFlowEnabled &&
+                           m_opticalFlow &&
+                           m_opticalFlow->isEnabled() &&
+                           m_opticalFlow->isAvailable() &&
+                           m_flowConfidencePSO &&
+                           m_flowSynthesisPSO &&
+                           prevFrameID != 0 &&
+                           currFrameID != 0;
     }
 
     MTL::Texture* displayTex = currentTex;
+    bool useOpticalFlow = false;
+    VisionFlowTextures flowTextures;
 
-    if (doInterpolate) {
-        // Dispatch temporal blend compute shader: mix(prev, curr, factor) → outputTex
+    if (wantsOpticalFlow &&
+        m_opticalFlow->copyLatestMatchingFlow(prevFrameID, currFrameID, flowTextures) &&
+        flowTextures.valid() &&
+        flowTextures.metadata.width == frameWidth &&
+        flowTextures.metadata.height == frameHeight) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        int slot = m_flowOutputSlot;
+        m_flowOutputSlot = (m_flowOutputSlot + 1) % kMaxFramesInFlight;
+        synthTex = m_synthesizedTex[slot];
+        confidenceTex = m_confidenceTex[slot];
+        if (synthTex) synthTex->retain();
+        if (confidenceTex) confidenceTex->retain();
+        useOpticalFlow = synthTex && confidenceTex && flowTextures.forwardTexture;
+    }
+
+    if (useOpticalFlow) {
+        auto dispatch2D = [&](MTL::ComputeCommandEncoder* enc,
+                              MTL::ComputePipelineState* pso) {
+            NS::UInteger w = pso->threadExecutionWidth();
+            NS::UInteger h = std::max<NS::UInteger>(
+                1, pso->maxTotalThreadsPerThreadgroup() / w);
+            MTL::Size tg(w, h, 1);
+            MTL::Size grid((frameWidth + w - 1) / w, (frameHeight + h - 1) / h, 1);
+            enc->dispatchThreadgroups(grid, tg);
+        };
+
+        FlowConfidenceParams confidenceParams {};
+        confidenceParams.hasReverseFlow = flowTextures.hasReverse() ? 1u : 0u;
+        auto* confEnc = cmd->computeCommandEncoder();
+        confEnc->setComputePipelineState(m_flowConfidencePSO);
+        confEnc->setTexture(flowTextures.forwardTexture, 0);
+        confEnc->setTexture(flowTextures.reverseTexture, 1);
+        confEnc->setTexture(confidenceTex, 2);
+        confEnc->setBytes(&confidenceParams, sizeof(confidenceParams), 0);
+        dispatch2D(confEnc, m_flowConfidencePSO);
+        confEnc->endEncoding();
+
+        FlowSynthesisParams synthesisParams {};
+        synthesisParams.blendFactor    = blendFactor;
+        synthesisParams.hasReverseFlow = flowTextures.hasReverse() ? 1u : 0u;
+        synthesisParams.splitScreen    = 0;
+
+        auto* synthEnc = cmd->computeCommandEncoder();
+        synthEnc->setComputePipelineState(m_flowSynthesisPSO);
+        synthEnc->setTexture(prevTex, 0);
+        synthEnc->setTexture(currentTex, 1);
+        synthEnc->setTexture(flowTextures.forwardTexture, 2);
+        synthEnc->setTexture(flowTextures.reverseTexture, 3);
+        synthEnc->setTexture(confidenceTex, 4);
+        synthEnc->setTexture(synthTex, 5);
+        synthEnc->setBytes(&synthesisParams, sizeof(synthesisParams), 0);
+        dispatch2D(synthEnc, m_flowSynthesisPSO);
+        synthEnc->endEncoding();
+
+        displayTex = synthTex;
+        m_interpCount.fetch_add(1, std::memory_order_relaxed);
+        m_flowInterpCount.fetch_add(1, std::memory_order_relaxed);
+    } else if (doInterpolate) {
+        // Crossfade fallback: mix(prev, curr, factor) → outputTex
         auto* compEnc = cmd->computeCommandEncoder();
         compEnc->setComputePipelineState(m_interpPSO);
         compEnc->setTexture(prevTex, 0);
@@ -237,6 +447,8 @@ void MetalEngine::renderFrame()
     if (currentTex) currentTex->release();
     if (prevTex) prevTex->release();
     if (outputTex) outputTex->release();
+    if (synthTex) synthTex->release();
+    if (confidenceTex) confidenceTex->release();
 
     pool->release();
 }
@@ -387,7 +599,7 @@ void MetalEngine::buildResources(uint32_t width, uint32_t height)
         assert(m_inputTex[i]);
     }
 
-    // Interpolation output texture
+    // Crossfade fallback output texture
     if (m_outputTex) m_outputTex->release();
     {
         auto* td = MTL::TextureDescriptor::texture2DDescriptor(
@@ -397,6 +609,175 @@ void MetalEngine::buildResources(uint32_t width, uint32_t height)
         m_outputTex = m_device->newTexture(td);
         assert(m_outputTex);
     }
+
+    // Optical-flow synthesis output ring + per-pixel confidence mask
+    for (int i = 0; i < kMaxFramesInFlight; ++i) {
+        if (m_synthesizedTex[i]) { m_synthesizedTex[i]->release(); m_synthesizedTex[i] = nullptr; }
+        if (m_confidenceTex[i])  { m_confidenceTex[i]->release();  m_confidenceTex[i]  = nullptr; }
+
+        auto* synthDesc = MTL::TextureDescriptor::texture2DDescriptor(
+            MTL::PixelFormatBGRA8Unorm, width, height, false);
+        synthDesc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageShaderWrite);
+        synthDesc->setStorageMode(MTL::StorageModePrivate);
+        m_synthesizedTex[i] = m_device->newTexture(synthDesc);
+
+        auto* confDesc = MTL::TextureDescriptor::texture2DDescriptor(
+            MTL::PixelFormatR16Float, width, height, false);
+        confDesc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageShaderWrite);
+        confDesc->setStorageMode(MTL::StorageModePrivate);
+        m_confidenceTex[i] = m_device->newTexture(confDesc);
+    }
+}
+
+void MetalEngine::buildFlowPipelines()
+{
+    if (m_flowConfidencePSO) { m_flowConfidencePSO->release(); m_flowConfidencePSO = nullptr; }
+    if (m_flowSynthesisPSO)  { m_flowSynthesisPSO->release();  m_flowSynthesisPSO  = nullptr; }
+
+    NS::Error* err = nullptr;
+    const char* src = R"MSL(
+        #include <metal_stdlib>
+        using namespace metal;
+
+        struct FlowConfidenceParams {
+            uint  hasReverseFlow;
+            float consistencyBias;
+            float consistencyScale;
+            float fallbackConfidence;
+        };
+
+        struct FlowSynthesisParams {
+            float blendFactor;
+            uint  hasReverseFlow;
+            uint  splitScreen;
+            uint  reserved;
+        };
+
+        constexpr sampler kLinearClampSampler(filter::linear, address::clamp_to_edge);
+
+        static inline bool inBounds(float2 pixel, float2 size)
+        {
+            return all(pixel >= 0.0f) && pixel.x <= (size.x - 1.0f) && pixel.y <= (size.y - 1.0f);
+        }
+
+        static inline float2 pixelToUV(float2 pixel, float2 size)
+        {
+            return (pixel + 0.5f) / size;
+        }
+
+        kernel void estimateConfidence(
+            texture2d<float, access::read> forwardFlow     [[texture(0)]],
+            texture2d<float, access::read> reverseFlow     [[texture(1)]],
+            texture2d<half,  access::write> confidenceMask [[texture(2)]],
+            constant FlowConfidenceParams& params          [[buffer(0)]],
+            uint2 gid [[thread_position_in_grid]])
+        {
+            if (gid.x >= confidenceMask.get_width() || gid.y >= confidenceMask.get_height()) return;
+
+            float2 size = float2(confidenceMask.get_width(), confidenceMask.get_height());
+            float2 pixel = float2(gid);
+            float2 forward = forwardFlow.read(gid).xy;
+            float2 destination = pixel + forward;
+
+            float confidence = 0.0f;
+            if (inBounds(destination, size)) {
+                if (params.hasReverseFlow != 0) {
+                    uint2 reverseSample = uint2(clamp(destination, float2(0.0f), size - 1.0f));
+                    float2 reverse = reverseFlow.read(reverseSample).xy;
+                    float error = length(forward + reverse);
+                    float threshold = params.consistencyBias +
+                                      params.consistencyScale * max(length(forward), length(reverse));
+                    confidence = 1.0f - smoothstep(0.0f, threshold, error);
+                } else {
+                    float magnitude = length(forward);
+                    float attenuation = smoothstep(2.0f, 24.0f, magnitude);
+                    confidence = mix(params.fallbackConfidence, 0.25f, attenuation);
+                }
+            }
+
+            confidenceMask.write(half4(half(clamp(confidence, 0.0f, 1.0f))), gid);
+        }
+
+        kernel void synthesizeFlow(
+            texture2d<float, access::sample> prevColor       [[texture(0)]],
+            texture2d<float, access::sample> currColor       [[texture(1)]],
+            texture2d<float, access::read>   forwardFlow     [[texture(2)]],
+            texture2d<float, access::read>   reverseFlow     [[texture(3)]],
+            texture2d<half,  access::read>   confidenceMask  [[texture(4)]],
+            texture2d<float, access::write>  outputTexture   [[texture(5)]],
+            constant FlowSynthesisParams& params             [[buffer(0)]],
+            uint2 gid [[thread_position_in_grid]])
+        {
+            if (gid.x >= outputTexture.get_width() || gid.y >= outputTexture.get_height()) return;
+
+            float2 size = float2(outputTexture.get_width(), outputTexture.get_height());
+            float2 pixel = float2(gid);
+            float2 uv = pixelToUV(pixel, size);
+            float t = clamp(params.blendFactor, 0.0f, 1.0f);
+
+            float4 simpleBlend = mix(prevColor.sample(kLinearClampSampler, uv),
+                                     currColor.sample(kLinearClampSampler, uv),
+                                     t);
+
+            float2 forward = forwardFlow.read(gid).xy;
+            float2 prevSourcePixel = pixel - forward * t;
+            float2 currSourcePixel = pixel + forward * (1.0f - t);
+            if (params.hasReverseFlow != 0) {
+                float2 reverse = reverseFlow.read(gid).xy;
+                currSourcePixel = pixel - reverse * (1.0f - t);
+            }
+
+            bool prevValid = inBounds(prevSourcePixel, size);
+            bool currValid = inBounds(currSourcePixel, size);
+            float confidence = confidenceMask.read(gid).x;
+            if (!prevValid || !currValid) confidence = 0.0f;
+
+            float4 warpedPrev = prevColor.sample(kLinearClampSampler, pixelToUV(prevSourcePixel, size));
+            float4 warpedCurr = currColor.sample(kLinearClampSampler, pixelToUV(currSourcePixel, size));
+            float4 motionBlend = mix(warpedPrev, warpedCurr, t);
+
+            float4 result = mix(simpleBlend, motionBlend, clamp(confidence, 0.0f, 1.0f));
+            if (params.splitScreen != 0 && gid.x < (outputTexture.get_width() / 2)) {
+                result = currColor.sample(kLinearClampSampler, uv);
+            }
+
+            outputTexture.write(result, gid);
+        }
+    )MSL";
+
+    auto* lib = m_device->newLibrary(
+        NS::String::string(src, NS::UTF8StringEncoding), nullptr, &err);
+    if (!lib) {
+        std::fprintf(stderr,
+                     "[MetalEngine] Failed to compile optical-flow shaders: %s\n",
+                     (err && err->localizedDescription())
+                         ? err->localizedDescription()->utf8String()
+                         : "unknown");
+        return;
+    }
+
+    auto buildPSO = [&](const char* name, MTL::ComputePipelineState*& outPSO) {
+        auto* fn = lib->newFunction(NS::String::string(name, NS::UTF8StringEncoding));
+        if (!fn) {
+            std::fprintf(stderr, "[MetalEngine] Missing kernel '%s'\n", name);
+            return;
+        }
+        outPSO = m_device->newComputePipelineState(fn, &err);
+        if (!outPSO) {
+            std::fprintf(stderr,
+                         "[MetalEngine] Failed to create PSO '%s': %s\n",
+                         name,
+                         (err && err->localizedDescription())
+                             ? err->localizedDescription()->utf8String()
+                             : "unknown");
+        }
+        fn->release();
+    };
+
+    buildPSO("estimateConfidence", m_flowConfidencePSO);
+    buildPSO("synthesizeFlow",     m_flowSynthesisPSO);
+
+    lib->release();
 }
 
 void MetalEngine::uploadToTexture(MTL::Texture* tex, const void* pixels,
